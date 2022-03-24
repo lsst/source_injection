@@ -24,6 +24,6 @@ TEST SCRIPT
 """
 import numpy as np
 
-test = np.array([1,2,3])
+test = np.array([1, 2, 3])
 
-result = test / 10
+result = test / 100

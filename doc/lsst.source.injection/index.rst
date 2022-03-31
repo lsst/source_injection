@@ -2,50 +2,59 @@
 
 .. _lsst.source.injection:
 
-#####################
-lsst.source.injection
-#####################
+=======================
+ lsst.source.injection
+=======================
 
-.. Paragraph that describes what this Python module does and links to related modules and frameworks.
+----------------------------
+ Synthetic Source Injection
+----------------------------
 
-.. .. _lsst.source.injection-using:
+The ``lsst.source.injection`` package contains tools designed to assist in the
+injection of synthetic sources into scientific imaging. Source generation and
+subsequent source injection is powered by the
+`GalSim`_ software package.
 
-.. Using lsst.source.injection
-.. ===========================
+.. _GalSim: https://galsim-developers.github.io/GalSim/
 
-.. toctree linking to topics related to using the module's APIs.
+.. _lsst.source.injection-scripts:
 
-.. .. toctree::
-..    :maxdepth: 1
+Command Line Scripts
+====================
+
+Utility scripts which may be called from the command line.
+
+.. toctree::
+   :maxdepth: 1
+   :glob:
+
+   scripts/*
+
+.. _lsst.source.injection-tasks:
+
+Pipeline Tasks
+==============
+
+Documentation for ``lsst.pipe.base`` pipeline tasks within this package.
+
+.. lsst-pipelinetasks::
+   :root: lsst.source.injection
+   :toctree: tasks
 
 .. _lsst.source.injection-contributing:
 
 Contributing
 ============
 
-``lsst.source.injection`` is developed at https://github.com/lsst/source_injection.
-You can find Jira issues for this module under the `source_injection <https://jira.lsstcorp.org/issues/?jql=project%20%3D%20DM%20AND%20component%20%3D%20source_injection>`_ component.
+The ``lsst.source.injection`` package is developed at
+`github.com/lsst/source_injection <https://github.com/lsst/source_injection>`_.
 
-.. If there are topics related to developing this module (rather than using it), link to this from a toctree placed here.
+Jira issues relating to this package can be found using the
+`source_injection <https://ls.st/sourceinjectionjira>`_ component.
 
-.. .. toctree::
-..    :maxdepth: 1
+.. _lsst.source.injection-pyapi:
 
-.. .. _lsst.source.injection-scripts:
-
-.. Script reference
-.. ================
-
-.. .. TODO: Add an item to this toctree for each script reference topic in the scripts subdirectory.
-
-.. .. toctree::
-..    :maxdepth: 1
-
-.. .. _lsst.source.injection-pyapi:
-
-Python API reference
+Python API Reference
 ====================
 
 .. automodapi:: lsst.source.injection
-   :no-main-docstr:
-   :no-inheritance-diagram:

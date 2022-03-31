@@ -78,7 +78,7 @@ An example calling this task from the command line using `pipetask run`:
     -i $INPUT_DATA_COLL,$INJECTION_CATALOG_COLL \
     -o $OUTPUT_COLL \
     -p $SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml \
-    -d "instrument='HSC' AND exposure=1228 AND detector=10"
+    -d "instrument='HSC' AND exposure=1228 AND detector=51"
 
 *where*
 

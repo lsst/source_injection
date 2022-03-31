@@ -182,6 +182,8 @@ def generate_injection_catalog(
     if number == 1:
         extra_info = f"{len(table)} unique sources."
     else:
-        extra_info = f"{len(table)} sources: {int(len(table)/number)} combinations repeated {number} times."
+        num_combinations = int(len(table) / number)
+        grammar = "combination" if num_combinations == 1 else "combinations"
+        extra_info = f"{len(table)} sources: {num_combinations} {grammar} repeated {number} times."
     logger.info("Generated an injection catalog containing %s", extra_info)
     return table

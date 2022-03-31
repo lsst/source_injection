@@ -10,3 +10,4 @@ source_injection documentation preview
    :maxdepth: 1
 
    lsst.source.injection/index
+   lsst.source.injection/faqs

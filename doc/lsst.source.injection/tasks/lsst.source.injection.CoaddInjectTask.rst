@@ -74,7 +74,7 @@ An example calling this task from the command line using `pipetask run`:
 .. code-block:: shell
 
     SKYINST="skymap='hsc_rings_v1' AND instrument='HSC'"
-    DATAQUERY="tract=9813 AND patch=25 AND band='i'"
+    DATAQUERY="tract=9813 AND patch=42 AND band='i'"
 
     pipetask --long-log --log-file $LOGFILE \
     run --register-dataset-types \

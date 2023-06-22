@@ -1,0 +1,8 @@
+description: Single-frame-level source injection into exposure dataset types.
+tasks:
+  inject_exposure:
+    class: lsst.source.injection.inject_exposure.ExposureInjectTask
+    config:
+      external_psf: true
+      external_photo_calib: true
+      external_wcs: true

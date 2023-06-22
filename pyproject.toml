@@ -19,3 +19,6 @@ convention = "numpy"
 # D200, D205 and D400 all complain if the first sentence of the docstring does
 # not fit on one line.
 add-ignore = ["D107", "D105", "D102", "D100", "D200", "D205", "D400"]
+
+[tool.lsst_versions]
+write_to = "python/lsst/source/injection/version.py"

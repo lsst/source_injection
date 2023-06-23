@@ -23,6 +23,7 @@ from __future__ import annotations
 
 __all__ = ["generate_injection_catalog"]
 
+import hashlib
 import itertools
 import logging
 from collections.abc import Sequence
@@ -40,6 +41,7 @@ def generate_injection_catalog(
     wcs: SkyWcs = None,
     number: int = 1,
     density: int | None = None,
+    seed: Any = None,
     log_level: int = logging.INFO,
     **kwargs: Any,
 ) -> Table:
@@ -49,9 +51,10 @@ def generate_injection_catalog(
     supplied input parameters. The catalog is returned as an astropy Table.
 
     On-sky source positions are generated using the quasi-random Halton
-    sequence. The Halton sequence is seeded using the absolute products of the
-    right ascension and declination limits. This ensures that the same sequence
-    is always generated for the same limits.
+    sequence. By default, the Halton sequence is seeded using the product of
+    the right ascension and declination limit ranges. This ensures that the
+    same sequence is always generated for the same limits. This seed may be
+    overridden by specifying the ``seed`` parameter.
 
     A unique injection ID is generated for each source. The injection ID
     encodes two pieces of information: the unique source identification number
@@ -83,6 +86,10 @@ def generate_injection_catalog(
         ``number`` parameter will be ignored. Instead, the number of unique
         parameter combination generations will be calculated to achieve the
         desired density. The default is `None` (i.e., no density calculation).
+    seed : `Any`, optional
+        The seed to use for the Halton sequence. If not given or ``None``
+        (default), the seed will be set using the product of the right
+        ascension and declination limit ranges.
     log_level : `int`, optional
         The log level to use for logging.
     **kwargs : `Any`
@@ -142,8 +149,13 @@ def generate_injection_catalog(
     param_table = Table(rows=list(itertools.product(*values)), names=keys)
 
     # Generate on-sky coordinate pairs.
-    seed = hash(np.abs(np.prod(ra_lim) * np.prod(dec_lim)))
-    sampler = qmc.Halton(d=2, seed=seed)
+    if not seed:
+        seed = str(np.diff(ra_lim)[0] * np.diff(dec_lim)[0])
+    # Random seed is the lower 32 bits of the hashed name.
+    # We use hashlib.sha256 for guaranteed repeatability.
+    hex_hash = hashlib.sha256(seed.encode("UTF-8")).hexdigest()
+    hashed_seed = int("0x" + hex_hash, 0) & 0xFFFFFFFF
+    sampler = qmc.Halton(d=2, seed=hashed_seed)
     sample = sampler.random(n=len(param_table))
     # Flip RA values if no WCS given.
     if not wcs:
@@ -156,7 +168,7 @@ def generate_injection_catalog(
         sky_coords = Table(xy_coords, names=("ra", "dec"))
     # Perform an additional random permutation of the sky coordinate pairs to
     # minimize the potential for on-sky parameter correlations.
-    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(hashed_seed)
     sky_coords = Table(rng.permutation(sky_coords))
 
     # Generate the unique injection ID and construct the final table.

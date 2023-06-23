@@ -42,9 +42,9 @@ input parameters. The catalog may be printed to screen, ingested into a butler
 repository, or written to disk using the astropy Table API.
 
 On-sky source positions are generated using the quasi-random Halton sequence.
-The Halton sequence is seeded using the absolute products of the right
-ascension and declination limits. This ensures that the same sequence is always
-generated for the same limits.
+By default, the Halton sequence is seeded using the product of the right
+ascension and declination limit ranges. This ensures that the same sequence is
+always generated for the same limits. This seed may be overridden by the user.
 
 A unique injection ID is generated for each source. The injection ID encodes
 two pieces of information: the unique source identification number and the
@@ -109,6 +109,13 @@ will be generated using Cartesian geometry.
         nargs="+",
         action="append",
     )
+    parser_general.add_argument(
+        "--seed",
+        type=str,
+        help="Seed override when generating quasi-random RA/Dec positions.",
+        metavar="SEED",
+    )
+
     # Butler options.
     parser_butler = parser.add_argument_group("Butler Options")
     parser_butler.add_argument(
@@ -259,12 +266,14 @@ def main():
 
     # Generate the source injection catalog.
     density = vars(args).get("density", None)
+    seed = vars(args).get("seed", None)
     table = generate_injection_catalog(
         ra_lim=args.ra_lim,
         dec_lim=args.dec_lim,
         wcs=wcs,
         number=args.number,
         density=density,
+        seed=seed,
         **params,
     )
 

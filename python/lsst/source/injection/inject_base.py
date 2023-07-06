@@ -334,11 +334,11 @@ class BaseInjectTask(PipelineTask):
         else:
             injection_id = range(len(injection_data))
         injection_header = Table(
-            dict(
-                injection_id=injection_id,
-                injection_flag=np.zeros(len(injection_data), dtype=int),
-                injection_draw_size=np.zeros(len(injection_data), dtype=int),
-            )
+            {
+                "injection_id": injection_id,
+                "injection_flag": np.zeros(len(injection_data), dtype=int),
+                "injection_draw_size": np.zeros(len(injection_data), dtype=int),
+            }
         )
 
         # Construct final injection catalog.

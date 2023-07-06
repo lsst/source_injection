@@ -25,7 +25,8 @@ __all__ = ["generate_galsim_objects", "inject_galsim_objects_into_exposure"]
 
 import os
 from collections import Counter
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 import galsim
 import numpy as np
@@ -120,7 +121,7 @@ def get_shear_data(
         Dictionary of source data to pass to the Shear constructor.
     """
     shear_params = set(shear_attributes) & set(source_data.keys())
-    shear_data = dict()
+    shear_data = {}
     for shear_param in shear_params:
         if shear_param == "beta":
             shear_data.update({shear_param: source_data[shear_param] * galsim.degrees})

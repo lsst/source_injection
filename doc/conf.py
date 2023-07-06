@@ -5,10 +5,9 @@ For more information, see:
 https://developer.lsst.io/stack/building-single-package-docs.html
 """
 
-from documenteer.conf.pipelinespkg import *
-
+from documenteer.conf.pipelinespkg import *  # noqa: F403
 
 project = "source_injection"
-html_theme_options["logotext"] = project
+html_theme_options["logotext"] = project  # noqa: F405
 html_title = project
 html_short_title = project

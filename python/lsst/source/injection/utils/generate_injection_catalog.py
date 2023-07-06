@@ -25,7 +25,8 @@ __all__ = ["generate_injection_catalog"]
 
 import itertools
 import logging
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import numpy as np
 from astropy.table import Table, hstack

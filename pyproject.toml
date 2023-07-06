@@ -7,8 +7,6 @@ profile = "black"
 line_length = 110
 
 [tool.pytest.ini_options]
-addopts = "--flake8"
-flake8-ignore = ["W503", "E203", "N802", "N803", "N806", "N812", "N815", "N816"]
 
 [tool.pydocstyle]
 convention = "numpy"

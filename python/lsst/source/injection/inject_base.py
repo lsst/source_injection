@@ -168,23 +168,23 @@ class BaseInjectTask(PipelineTask):
 
         Parameters
         ----------
-        injection_catalogs : `list` [`lsst.daf.butler.DeferredDatasetHandle`]
+        injection_catalogs : `list` [`astropy.table.Table`]
             Tract level injection catalogs that potentially cover the named
             input exposure.
-        input_exposure : `lsst.afw.image.exposure.ExposureF`
+        input_exposure : `lsst.afw.image.ExposureF`
             The exposure sources will be injected into.
         psf: `lsst.meas.algorithms.ImagePsf`
             PSF model.
-        photo_calib : `lsst.afw.image.photoCalib.PhotoCalib`
+        photo_calib : `lsst.afw.image.PhotoCalib`
             Photometric calibration used to calibrate injected sources.
         wcs : `lsst.afw.geom.SkyWcs`
             WCS used to calibrate injected sources.
 
         Returns
         -------
-        result_struct : `lsst.pipe.base.struct.Struct`
-            contains : outputExposure : `lsst.afw.image.exposure.ExposureF`
-                       outputCatalog : `lsst.afw.table.source.SourceCatalog`
+        output_struct : `lsst.pipe.base.Struct`
+            contains : output_exposure : `lsst.afw.image.ExposureF`
+                       output_catalog : `lsst.afw.table.SourceCatalog`
         """
         self.config = cast(BaseInjectConfig, self.config)
 
@@ -236,7 +236,7 @@ class BaseInjectTask(PipelineTask):
         }
 
         # Flag sources in the injection catalog prior to source injection.
-        injection_catalog = self._flag_sources(injection_catalog, input_exposure, binary_flags)
+        injection_catalog = self._flag_sources(injection_catalog, binary_flags)
 
         # Inject sources into input_exposure.
         good_injections: list[bool] = injection_catalog["injection_flag"] == 0
@@ -316,7 +316,7 @@ class BaseInjectTask(PipelineTask):
 
         Parameters
         ----------
-        injection_catalogs : `list` [`lsst.daf.butler.DeferredDatasetHandle`]
+        injection_catalogs : `list` [`astropy.table.Table`]
             Set of synthetic source catalogs to concatenate.
 
         Returns
@@ -421,7 +421,7 @@ class BaseInjectTask(PipelineTask):
         ----------
         injection_catalog : `astropy.table.Table`
             The catalog of sources to be injected.
-        input_exposure : `lsst.afw.image.exposure.ExposureF`
+        input_exposure : `lsst.afw.image.ExposureF`
             The exposure to inject sources into.
 
         Returns
@@ -499,7 +499,7 @@ class BaseInjectTask(PipelineTask):
         injection_catalog = injection_catalog[sources_to_keep]
         return injection_catalog
 
-    def _flag_sources(self, injection_catalog, input_exposure, binary_flags):
+    def _flag_sources(self, injection_catalog, binary_flags):
         """Flag sources in the injection catalog prior to source injection.
 
         This method will flag sources in the injection catalog prior to
@@ -518,8 +518,6 @@ class BaseInjectTask(PipelineTask):
         ----------
         injection_catalog : `astropy.table.Table`
             Catalog of sources to be injected.
-        input_exposure : `lsst.afw.image.exposure.ExposureF`
-            The exposure sources will be injected into.
         binary_flags : `dict` [`str`, `int`]
             Dictionary of binary flags to be used in the injection_flag column.
 

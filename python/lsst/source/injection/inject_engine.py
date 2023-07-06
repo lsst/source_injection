@@ -25,7 +25,8 @@ __all__ = ["generate_galsim_objects", "inject_galsim_objects_into_exposure"]
 
 import os
 from collections import Counter
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 import galsim
 import numpy as np

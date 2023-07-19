@@ -199,7 +199,12 @@ class BaseInjectTask(PipelineTask):
 
         # Make empty table if none supplied to support process_all_data_ids.
         if len(injection_catalogs) == 0:
-            injection_catalogs = [Table()]
+            if self.config.process_all_data_ids:
+                injection_catalogs = [Table(names=["ra", "dec", "source_type"])]
+            else:
+                raise RuntimeError(
+                    "No injection sources overlap the data query. Check injection catalog coverage."
+                )
 
         # Consolidate injection catalogs and compose main injection catalog.
         injection_catalog = self._compose_injection_catalog(injection_catalogs)
@@ -235,14 +240,14 @@ class BaseInjectTask(PipelineTask):
             "PSF_COMPUTE_ERROR": 5,
         }
 
-        # Flag sources in the injection catalog prior to source injection.
-        injection_catalog = self._flag_sources(injection_catalog, binary_flags)
+        # Check that sources in the injection catalog are able to be injected.
+        injection_catalog = self._check_sources(injection_catalog, binary_flags)
 
         # Inject sources into input_exposure.
         good_injections: list[bool] = injection_catalog["injection_flag"] == 0
         good_injections_index = [i for i, val in enumerate(good_injections) if val]
-        num_injected_sources = np.sum(good_injections)
-        if num_injected_sources > 0:
+        num_injection_sources = np.sum(good_injections)
+        if num_injection_sources > 0:
             object_generator = generate_galsim_objects(
                 injection_catalog=injection_catalog[good_injections],
                 photo_calib=photo_calib,
@@ -282,9 +287,37 @@ class BaseInjectTask(PipelineTask):
                     injection_catalog["injection_flag"][good_injections_index[i]] += (
                         2 ** binary_flags["PSF_COMPUTE_ERROR"]
                     )
-        elif num_injected_sources == 0 and self.config.process_all_data_ids:
+            num_injected_sources = np.sum(injection_catalog["injection_flag"] == 0)
+            num_skipped_sources = np.sum(injection_catalog["injection_flag"] != 0)
+            grammar1 = "source" if num_injection_sources == 1 else "sources"
+            grammar2 = "source" if num_skipped_sources == 1 else "sources"
+
+            injection_flags = np.array(injection_catalog["injection_flag"])
+            num_injection_flags = [np.sum((injection_flags & 2**x) > 0) for x in binary_flags.values()]
+            if np.sum(num_injection_flags) > 0:
+                injection_flag_report = ": " + ", ".join(
+                    [f"{x}({y})" for x, y in zip(binary_flags.keys(), num_injection_flags) if y > 0]
+                )
+            else:
+                injection_flag_report = ""
+            self.log.info(
+                "Injected %d of %d potential %s. %d %s flagged and skipped%s.",
+                num_injected_sources,
+                num_injection_sources,
+                grammar1,
+                num_skipped_sources,
+                grammar2,
+                injection_flag_report,
+            )
+        elif num_injection_sources == 0 and self.config.process_all_data_ids:
             self.log.warning("No sources to be injected for this DatasetRef; processing anyway.")
             input_exposure.mask.addMaskPlane(self.config.mask_plane_name)
+            bitnumber = input_exposure.mask.getMaskPlane(self.config.mask_plane_name)
+            self.log.info(
+                "Adding %s mask plane with bit number %d to the exposure.",
+                self.config.mask_plane_name,
+                bitnumber,
+            )
         else:
             raise RuntimeError(
                 "No sources to be injected for this DatasetRef, and process_all_data_ids is False."
@@ -343,17 +376,17 @@ class BaseInjectTask(PipelineTask):
 
         # Construct final injection catalog.
         injection_catalog = hstack([injection_header, injection_data])
-        if "source_type" in injection_catalog.colnames:
-            injection_catalog["source_type"] = injection_catalog["source_type"].astype(str)
+        injection_catalog["source_type"] = injection_catalog["source_type"].astype(str)
 
         # Log and return.
+        num_injection_catalogs = np.sum([len(table) > 0 for table in injection_catalogs])
         grammar1 = "source" if len(injection_catalog) == 1 else "sources"
-        grammar2 = "trixel" if len(injection_catalogs) == 1 else "trixels"
+        grammar2 = "trixel" if num_injection_catalogs == 1 else "trixels"
         self.log.info(
             "Retrieved %d injection %s from %d HTM %s.",
             len(injection_catalog),
             grammar1,
-            len(injection_catalogs),
+            num_injection_catalogs,
             grammar2,
         )
         return injection_catalog
@@ -410,8 +443,8 @@ class BaseInjectTask(PipelineTask):
 
         This method will remove sources which are not injectable for a variety
         of reasons, namely: sources which fall outside the padded exposure
-        bounding box; sources not selected by virtue of their visit; and
-        sources not selected by virtue of their evaluated selection criteria.
+        bounding box or sources not selected by virtue of their evaluated
+        selection criteria.
 
         If the input injection catalog contains x/y inputs but does not contain
         RA/Dec inputs, WCS information will be used to generate RA/Dec sky
@@ -466,7 +499,7 @@ class BaseInjectTask(PipelineTask):
             if (num_not_contained := np.sum(~is_contained)) > 0:
                 grammar = ("source", "a centroid") if num_not_contained == 1 else ("sources", "centroids")
                 self.log.info(
-                    "Removing %d injection %s with %s outside the padded image bounding box.",
+                    "Identified %d injection %s with %s outside the padded image bounding box.",
                     num_not_contained,
                     grammar[0],
                     grammar[1],
@@ -480,7 +513,7 @@ class BaseInjectTask(PipelineTask):
             if (num_not_selected := np.sum(~selected)) >= 0:
                 grammar = ["source", "was"] if num_not_selected == 1 else ["sources", "were"]
                 self.log.warning(
-                    "Removing %d injection %s that %s not selected.",
+                    "Identified %d injection %s that %s not selected.",
                     num_not_selected,
                     grammar[0],
                     grammar[1],
@@ -490,7 +523,7 @@ class BaseInjectTask(PipelineTask):
         num_cleaned_total = np.sum(~sources_to_keep)
         grammar = "source" if len(sources_to_keep) == 1 else "sources"
         self.log.info(
-            "Catalog cleaning removed %d of %d %s; %d remaining for catalog flag checking.",
+            "Catalog cleaning removed %d of %d %s; %d remaining for catalog checking.",
             num_cleaned_total,
             len(sources_to_keep),
             grammar,
@@ -499,12 +532,13 @@ class BaseInjectTask(PipelineTask):
         injection_catalog = injection_catalog[sources_to_keep]
         return injection_catalog
 
-    def _flag_sources(self, injection_catalog, binary_flags):
-        """Flag sources in the injection catalog prior to source injection.
+    def _check_sources(self, injection_catalog, binary_flags):
+        """Check that sources in the injection catalog are able to be injected.
 
-        This method will flag sources in the injection catalog prior to
-        injection. Checks will be made on a number of parameters, including
-        magnitude, source type and Sérsic index (where relevant).
+        This method will check that sources in the injection catalog are able
+        to be injected, and will flag them if not. Checks will be made on a
+        number of parameters, including magnitude, source type and Sérsic index
+        (where relevant).
 
         Legacy profile types will be renamed to their standardized GalSim
         equivalents; any source profile types that are not GalSim classes will
@@ -607,7 +641,7 @@ class BaseInjectTask(PipelineTask):
         num_flagged_total = np.sum(injection_catalog["injection_flag"] != 0)
         grammar = "source" if len(injection_catalog) == 1 else "sources"
         self.log.info(
-            "Catalog flag checking applied flags to %d of %d %s; %d remaining for source generation.",
+            "Catalog checking flagged %d of %d %s; %d remaining for source generation.",
             num_flagged_total,
             len(injection_catalog),
             grammar,

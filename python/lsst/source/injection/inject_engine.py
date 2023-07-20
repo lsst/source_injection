@@ -472,7 +472,7 @@ def inject_galsim_objects_into_exposure(
             if pixel_coords == contained_point:  # no difference, so skip immediately
                 psf_compute_errors[i] = True
                 if logger:
-                    logger.warning("Cannot compute PSF for object at %s; skipping.", sky_coords)
+                    logger.debug("Cannot compute PSF for object at %s; flagging and skipping.", sky_coords)
                 continue
             # Otherwise, try again with new point.
             try:
@@ -480,7 +480,7 @@ def inject_galsim_objects_into_exposure(
             except InvalidParameterError:
                 psf_compute_errors[i] = True
                 if logger:
-                    logger.warning("Cannot compute PSF for object at %s; skipping.", sky_coords)
+                    logger.debug("Cannot compute PSF for object at %s; flagging and skipping.", sky_coords)
                 continue
 
         # Compute the aperture corrected PSF interpolated image.
@@ -521,8 +521,10 @@ def inject_galsim_objects_into_exposure(
             except GalSimFFTSizeError as err:
                 fft_size_errors[i] = True
                 if logger:
-                    logger.warning(
-                        "GalSimFFTSizeError raised for object at %s; skipping.\n%s", sky_coords, err
+                    logger.debug(
+                        "GalSimFFTSizeError raised for object at %s; flagging and skipping.\n%s",
+                        sky_coords,
+                        err,
                     )
                 continue
             common_box = Box2I(
@@ -533,6 +535,6 @@ def inject_galsim_objects_into_exposure(
             exposure[common_box].mask.array |= bitvalue
         else:
             if logger:
-                logger.warning("No area overlap for object at %s; skipping.", sky_coords)
+                logger.debug("No area overlap for object at %s; flagging and skipping.", sky_coords)
 
     return draw_sizes, common_bounds, fft_size_errors, psf_compute_errors

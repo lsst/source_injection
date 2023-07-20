@@ -23,6 +23,9 @@ from __future__ import annotations
 
 __all__ = ["make_injection_pipeline"]
 
+import logging
+
+from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import Pipeline
 
 
@@ -41,6 +44,7 @@ def make_injection_pipeline(
     exclude_subsets: bool = False,
     prefix: str = "injected_",
     instrument: str | None = None,
+    log_level: int = logging.INFO,
 ) -> Pipeline:
     """Make an expanded source injection pipeline.
 
@@ -67,12 +71,18 @@ def make_injection_pipeline(
         Prefix to prepend to each affected post-injection dataset type name.
     instrument : `str`, optional
         Add instrument overrides. Must be a fully qualified class name.
+    log_level : `int`, optional
+        The log level to use for logging.
 
     Returns
     -------
     pipeline : `lsst.pipe.base.Pipeline`
         An expanded source injection pipeline.
     """
+    # Instantiate logger.
+    logger = logging.getLogger(__name__)
+    logger.setLevel(log_level)
+
     pipeline = Pipeline.fromFile(reference_pipeline)
 
     # Add an instrument override, if provided.
@@ -84,6 +94,19 @@ def make_injection_pipeline(
     precursor_injection_task_labels = set()
     # Loop over all tasks in the pipeline.
     for taskDef in pipeline.toExpandedPipeline():
+        # Add override for Analysis Tools taskDefs. Connections in Analysis
+        # Tools are dynamically assigned, and so are not able to be modified in
+        # the same way as a static connection. Instead, we add a config
+        # override here to the connections.outputName field. This field is
+        # prepended to all Analysis Tools connections, and so will prepend the
+        # injection prefix to all plot/metric outputs. Further processing of
+        # this taskDef will be skipped thereafter.
+        if issubclass(taskDef.taskClass, AnalysisPipelineTask):
+            pipeline.addConfigOverride(
+                taskDef.label, "connections.outputName", prefix + taskDef.config.connections.outputName
+            )
+            continue
+
         conns = taskDef.connections
         input_types = _get_dataset_type_names(conns, conns.inputs)
         output_types = _get_dataset_type_names(conns, conns.outputs)
@@ -95,8 +118,18 @@ def make_injection_pipeline(
             injected_types |= output_types
             # Add the injection prefix to all affected dataset type names.
             for field in conns.inputs | conns.outputs:
-                if (conn_type := getattr(conns, field).name) in injected_types:
-                    pipeline.addConfigOverride(taskDef.label, "connections." + field, prefix + conn_type)
+                if hasattr(taskDef.config.connections.ConnectionsClass, field):
+                    # If the connection type is not dynamic, modify as usual.
+                    if (conn_type := getattr(conns, field).name) in injected_types:
+                        pipeline.addConfigOverride(taskDef.label, "connections." + field, prefix + conn_type)
+                else:
+                    # Add log warning if the connection type is dynamic.
+                    logger.warning(
+                        "Dynamic connection %s in task %s is not supported here. This connection will "
+                        "neither be modified nor merged into the output injection pipeline.",
+                        field,
+                        taskDef.label,
+                    )
 
     # Merge the injection pipeline to the modified pipeline, if provided.
     if injection_pipeline:

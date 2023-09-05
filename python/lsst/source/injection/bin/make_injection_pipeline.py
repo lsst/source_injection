@@ -77,6 +77,14 @@ the injection dataset type will also be updated to include the injection task.
         action="store_true",
     )
     parser.add_argument(
+        "-x",
+        "--excluded-tasks",
+        type=str,
+        help="Comma-separated set of task labels to exclude from the pipeline.",
+        metavar="task",
+        default="jointcal,gbdesAstrometricFit,fgcmBuildFromIsolatedStars,fgcmFitCycle,fgcmOutputProducts",
+    )
+    parser.add_argument(
         "-f",
         "--filename",
         help="Path to save a modified pipeline definition YAML file.",

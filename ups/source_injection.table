@@ -3,9 +3,11 @@
 # - Common third-party packages can be assumed to be recursively included by
 #   the "base" package.
 setupRequired(afw)
+setupRequired(analysis_tools)
 setupRequired(base)
 setupRequired(daf_butler)
 setupRequired(geom)
+setupRequired(obs_subaru)
 setupRequired(pex_config)
 setupRequired(pex_exceptions)
 setupRequired(pipe_base)

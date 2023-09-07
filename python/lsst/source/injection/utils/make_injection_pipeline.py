@@ -39,8 +39,8 @@ def _get_dataset_type_names(conns, fields):
 
 def make_injection_pipeline(
     dataset_type_name: str,
-    reference_pipeline: str,
-    injection_pipeline: str | None = None,
+    reference_pipeline: Pipeline | str,
+    injection_pipeline: Pipeline | str | None = None,
     exclude_subsets: bool = False,
     excluded_tasks: set[str]
     | str = {
@@ -69,9 +69,9 @@ def make_injection_pipeline(
     ----------
     dataset_type_name : `str`
         Name of the dataset type being injected into.
-    reference_pipeline : `str`
+    reference_pipeline : Pipeline | `str`
         Location of a reference pipeline definition YAML file.
-    injection_pipeline : `str`, optional
+    injection_pipeline : Pipeline | `str`, optional
         Location of an injection pipeline definition YAML file.
     exclude_subsets : `bool`, optional
         If True, do not update pipeline subsets to include the injection task.
@@ -94,7 +94,10 @@ def make_injection_pipeline(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
 
-    pipeline = Pipeline.fromFile(reference_pipeline)
+    if isinstance(reference_pipeline, str):
+        pipeline = Pipeline.fromFile(reference_pipeline)
+    else:
+        pipeline = reference_pipeline
 
     # Add an instrument override, if provided.
     if instrument:
@@ -162,7 +165,10 @@ def make_injection_pipeline(
 
     # Merge the injection pipeline to the modified pipeline, if provided.
     if injection_pipeline:
-        pipeline2 = Pipeline.fromFile(injection_pipeline)
+        if isinstance(injection_pipeline, str):
+            pipeline2 = Pipeline.fromFile(injection_pipeline)
+        else:
+            pipeline2 = injection_pipeline
         if len(pipeline2) != 1:
             raise RuntimeError(
                 f"The injection pipeline contains {len(pipeline2)} tasks; only one task is allowed."

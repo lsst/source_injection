@@ -42,6 +42,14 @@ def make_injection_pipeline(
     reference_pipeline: str,
     injection_pipeline: str | None = None,
     exclude_subsets: bool = False,
+    excluded_tasks: set[str]
+    | str = {
+        "jointcal",
+        "gbdesAstrometricFit",
+        "fgcmBuildFromIsolatedStars",
+        "fgcmFitCycle",
+        "fgcmOutputProducts",
+    },
     prefix: str = "injected_",
     instrument: str | None = None,
     log_level: int = logging.INFO,
@@ -67,6 +75,9 @@ def make_injection_pipeline(
         Location of an injection pipeline definition YAML file.
     exclude_subsets : `bool`, optional
         If True, do not update pipeline subsets to include the injection task.
+    excluded_tasks : `set` [`str`] | `str`
+        Set or comma-separated string of task labels to exclude from the
+        injection pipeline.
     prefix : `str`, optional
         Prefix to prepend to each affected post-injection dataset type name.
     instrument : `str`, optional
@@ -88,6 +99,24 @@ def make_injection_pipeline(
     # Add an instrument override, if provided.
     if instrument:
         pipeline.addInstrument(instrument)
+
+    # Remove all tasks which are not to be included in the injection pipeline.
+    if isinstance(excluded_tasks, str):
+        excluded_tasks = set(excluded_tasks.split(","))
+    for task_label in excluded_tasks:
+        # First remove tasks from their host subsets, if present.
+        try:
+            host_subsets = pipeline.findSubsetsWithLabel(task_label)
+        except ValueError:
+            pass
+        else:
+            for host_subset in host_subsets:
+                pipeline.removeLabelFromSubset(host_subset, task_label)
+        # Then remove the task from the pipeline.
+        try:
+            pipeline.removeTask(task_label)
+        except KeyError:
+            logger.warning("Task '%s' not found in pipeline; nothing to exclude.", task_label)
 
     # Determine the set of dataset type names affected by source injection
     injected_types = {dataset_type_name}

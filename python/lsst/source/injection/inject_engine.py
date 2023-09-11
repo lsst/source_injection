@@ -426,9 +426,14 @@ def inject_galsim_objects_into_exposure(
         Boolean flags indicating whether a PSF computation error was raised.
     """
     exposure.mask.addMaskPlane(mask_plane_name)
-    bitnumber = exposure.mask.getMaskPlane(mask_plane_name)
+    mask_plane_core_name = mask_plane_name + "_CORE"
+    exposure.mask.addMaskPlane(mask_plane_core_name)
     if logger:
-        logger.info("Adding %s mask plane with bit number %d to the exposure.", mask_plane_name, bitnumber)
+        logger.info(
+            "Adding %s and %s mask planes to the exposure.",
+            mask_plane_name,
+            mask_plane_core_name,
+        )
     psf = exposure.getPsf()
     wcs = exposure.getWcs()
     bbox = exposure.getBBox()
@@ -488,11 +493,12 @@ def inject_galsim_objects_into_exposure(
         psf_array /= aperture_correction
         galsim_psf = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
 
-        # Convolve the object with the PSF and generate a draw size.
+        # Convolve the object with the PSF and generate draw size.
         conv = galsim.Convolve(object, galsim_psf)
         if draw_size == 0:
             draw_size = conv.getGoodImageSize(galsim_wcs.minLinearScale())  # type: ignore
         injection_draw_size = int(draw_size)
+        injection_core_size = 3
         if draw_size_max > 0 and injection_draw_size > draw_size_max:
             if logger:
                 logger.warning(
@@ -503,6 +509,15 @@ def inject_galsim_objects_into_exposure(
                 )
             injection_draw_size = draw_size_max
         draw_sizes[i] = injection_draw_size
+        if injection_core_size > injection_draw_size:
+            if logger:
+                logger.debug(
+                    "Clipping core size for object at %s from %d to %d pixels.",
+                    sky_coords,
+                    injection_core_size,
+                    injection_draw_size,
+                )
+            injection_core_size = injection_draw_size
         sub_bounds = galsim.BoundsI(posi).withBorder(injection_draw_size // 2)
         object_common_bounds = full_bounds & sub_bounds
         common_bounds[i] = object_common_bounds  # type: ignore
@@ -533,6 +548,18 @@ def inject_galsim_objects_into_exposure(
             )
             bitvalue = exposure.mask.getPlaneBitMask(mask_plane_name)
             exposure[common_box].mask.array |= bitvalue
+            # Add a 3 x 3 pixel mask centered on the object. The mask must be
+            # large enough to always identify the core/peak of the injected
+            # source, but small enough that it rarely overlaps real sources.
+            sub_bounds_core = galsim.BoundsI(posi).withBorder(injection_core_size // 2)
+            object_common_bounds_core = full_bounds & sub_bounds_core
+            if object_common_bounds_core.area() > 0:
+                common_box_core = Box2I(
+                    Point2I(object_common_bounds_core.xmin, object_common_bounds_core.ymin),
+                    Point2I(object_common_bounds_core.xmax, object_common_bounds_core.ymax),
+                )
+                bitvalue_core = exposure.mask.getPlaneBitMask(mask_plane_core_name)
+                exposure[common_box_core].mask.array |= bitvalue_core
         else:
             if logger:
                 logger.debug("No area overlap for object at %s; flagging and skipping.", sky_coords)

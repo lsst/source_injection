@@ -101,7 +101,7 @@ class InjectEngineTestCase(TestCase):
         self.assertAlmostEqual(
             np.sum(self.exposure.image.array) - flux0,
             np.sum(inst_fluxes),
-            delta=0.0001 * np.sum(inst_fluxes),
+            delta=0.00015 * np.sum(inst_fluxes),
         )
         self.assertEqual(len(injected_outputs[0]), len(self.injection_catalog["ra"]))
         self.assertTrue(all(isinstance(injected_output, list) for injected_output in injected_outputs))

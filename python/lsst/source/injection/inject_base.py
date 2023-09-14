@@ -312,11 +312,12 @@ class BaseInjectTask(PipelineTask):
         elif num_injection_sources == 0 and self.config.process_all_data_ids:
             self.log.warning("No sources to be injected for this DatasetRef; processing anyway.")
             input_exposure.mask.addMaskPlane(self.config.mask_plane_name)
-            bitnumber = input_exposure.mask.getMaskPlane(self.config.mask_plane_name)
+            mask_plane_core_name = self.config.mask_plane_name + "_CORE"
+            input_exposure.mask.addMaskPlane(mask_plane_core_name)
             self.log.info(
-                "Adding %s mask plane with bit number %d to the exposure.",
+                "Adding %s and %s mask planes to the exposure.",
                 self.config.mask_plane_name,
-                bitnumber,
+                mask_plane_core_name,
             )
         else:
             raise RuntimeError(

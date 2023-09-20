@@ -27,6 +27,7 @@ import logging
 
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
+from lsst.pipe.tasks.calibrate import CalibrateTask
 
 
 def _get_dataset_type_names(conns, fields):
@@ -186,6 +187,10 @@ def make_injection_pipeline(
                 taskDef.label, "connections.outputName", prefix + taskDef.config.connections.outputName
             )
             continue
+
+        # TODO: make new config isInjectedDataset in CalibrateTask
+        if issubclass(taskDef.taskClass, CalibrateTask):
+
 
         conns = taskDef.connections
         input_types = _get_dataset_type_names(conns, conns.initInputs | conns.inputs)

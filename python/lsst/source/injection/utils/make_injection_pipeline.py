@@ -190,7 +190,13 @@ def make_injection_pipeline(
 
         # TODO: make new config isInjectedDataset in CalibrateTask
         if issubclass(taskDef.taskClass, CalibrateTask):
-
+            pipeline.addConfigPython(
+                taskDef.label, 'config.measurement.plugins["base_PixelFlags"].masksFpAnywhere |= ["INJECTED"]'
+            )
+            pipeline.addConfigPython(
+                taskDef.label,
+                'config.measurement.plugins["base_PixelFlags"].masksFpCenter |= ["INJECTED_CORE"]',
+            )
 
         conns = taskDef.connections
         input_types = _get_dataset_type_names(conns, conns.initInputs | conns.inputs)

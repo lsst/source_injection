@@ -28,6 +28,8 @@ import logging
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
 from lsst.pipe.tasks.calibrate import CalibrateTask
+from lsst.pipe.tasks.calibrateImage import CalibrateImageTask
+from lsst.pipe.tasks.multiBand import MeasureMergedCoaddSourcesTask
 
 
 def _get_dataset_type_names(conns, fields):
@@ -188,14 +190,16 @@ def make_injection_pipeline(
             )
             continue
 
-        # TODO: make new config isInjectedDataset in CalibrateTask
-        if issubclass(taskDef.taskClass, CalibrateTask):
+        # Add injection flag configs to relevant tasks
+        injected_flag_tasks = (CalibrateTask, CalibrateImageTask, MeasureMergedCoaddSourcesTask)
+        if issubclass(taskDef.taskClass, injected_flag_tasks):
             pipeline.addConfigPython(
-                taskDef.label, 'config.measurement.plugins["base_PixelFlags"].masksFpAnywhere |= ["INJECTED"]'
+                taskDef.label,
+                'config.measurement.plugins["base_PixelFlags"].masksFpAnywhere.extend(["INJECTED"])',
             )
             pipeline.addConfigPython(
                 taskDef.label,
-                'config.measurement.plugins["base_PixelFlags"].masksFpCenter |= ["INJECTED_CORE"]',
+                'config.measurement.plugins["base_PixelFlags"].masksFpCenter.extend(["INJECTED_CORE"])',
             )
 
         conns = taskDef.connections

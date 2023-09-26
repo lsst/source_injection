@@ -172,7 +172,10 @@ def make_injection_pipeline(
         )
 
     # Determine the set of dataset type names affected by source injection.
+<<<<<<< HEAD
     all_connection_type_names = set()
+=======
+>>>>>>> d0c5614 (draft)
     injected_types = {dataset_type_name}
     precursor_injection_task_labels = set()
     # Loop over all tasks in the pipeline.
@@ -200,6 +203,15 @@ def make_injection_pipeline(
             pipeline.addConfigPython(
                 taskDef.label,
                 'config.measurement.plugins["base_PixelFlags"].masksFpCenter.extend(["INJECTED_CORE"])',
+            )
+        if issubclass(taskDef.taskClass, CalibrateTask):
+            # pipeline.addConfigPython(
+            #     taskDef.label,
+            #     'config.astrometry.sourceSelector["science"].flags.bad.extend(["base_PixelFlags_flag_injected_coreCenter"])',
+            # )
+            pipeline.addConfigPython(
+                taskDef.label,
+                'config.astrometry.sourceSelector["astrometry"].badFlags.extend(["base_PixelFlags_flag_injected_coreCenter"])',
             )
 
         conns = taskDef.connections

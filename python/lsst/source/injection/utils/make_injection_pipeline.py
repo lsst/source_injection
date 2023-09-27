@@ -173,10 +173,7 @@ def make_injection_pipeline(
         )
 
     # Determine the set of dataset type names affected by source injection.
-<<<<<<< HEAD
     all_connection_type_names = set()
-=======
->>>>>>> d0c5614 (draft)
     injected_types = {dataset_type_name}
     precursor_injection_task_labels = set()
     # Loop over all tasks in the pipeline.
@@ -194,10 +191,6 @@ def make_injection_pipeline(
             )
             continue
 
-        # Add injection flag configs to relevant tasks
-        injected_flag_tasks = (CalibrateTask, CalibrateImageTask, MeasureMergedCoaddSourcesTask)
-        if issubclass(taskDef.taskClass, injected_flag_tasks):
-
         def configure_measurement(name):
             """Configure this task's SingleFrameMeasurement subtask (called
             ``name`` in the task config) to include INJECTED and INJECTED_CORE
@@ -211,13 +204,14 @@ def make_injection_pipeline(
                 taskDef.label,
                 f'config.{name}.plugins["base_PixelFlags"].masksFpCenter.extend(["INJECTED_CORE"])',
             )
+
         # Add injection flag configs to relevant tasks.
         injected_flag_tasks = (CharacterizeImageTask, CalibrateTask, MeasureMergedCoaddSourcesTask)
         if issubclass(taskDef.taskClass, injected_flag_tasks):
-            configure_measurement('measurement')
+            configure_measurement("measurement")
         if issubclass(taskDef.taskClass, CalibrateImageTask):
-            configure_measurement('psf_source_measurement')
-            configure_measurement('star_measurement')
+            configure_measurement("psf_source_measurement")
+            configure_measurement("star_measurement")
             pipeline.addConfigPython(
                 taskDef.label,
                 'config.star_selector["science"].flags.bad.extend(["base_PixelFlags_flag_injected_coreCenter"])',

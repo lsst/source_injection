@@ -29,6 +29,7 @@ from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
 from lsst.pipe.tasks.calibrate import CalibrateTask
 from lsst.pipe.tasks.calibrateImage import CalibrateImageTask
+from lsst.pipe.tasks.characterizeImage import CharacterizeImageTask
 from lsst.pipe.tasks.multiBand import MeasureMergedCoaddSourcesTask
 
 
@@ -196,24 +197,36 @@ def make_injection_pipeline(
         # Add injection flag configs to relevant tasks
         injected_flag_tasks = (CalibrateTask, CalibrateImageTask, MeasureMergedCoaddSourcesTask)
         if issubclass(taskDef.taskClass, injected_flag_tasks):
+
+        def configure_measurement(name):
+            """Configure this task's SingleFrameMeasurement subtask (called
+            ``name`` in the task config) to include INJECTED and INJECTED_CORE
+            in the catalog pixel flags.
+            """
             pipeline.addConfigPython(
                 taskDef.label,
-                'config.measurement.plugins["base_PixelFlags"].masksFpAnywhere.extend(["INJECTED"])',
+                f'config.{name}.plugins["base_PixelFlags"].masksFpAnywhere.extend(["INJECTED"])',
             )
             pipeline.addConfigPython(
                 taskDef.label,
-                'config.measurement.plugins["base_PixelFlags"].masksFpCenter.extend(["INJECTED_CORE"])',
+                f'config.{name}.plugins["base_PixelFlags"].masksFpCenter.extend(["INJECTED_CORE"])',
+            )
+        # Add injection flag configs to relevant tasks.
+        injected_flag_tasks = (CharacterizeImageTask, CalibrateTask, MeasureMergedCoaddSourcesTask)
+        if issubclass(taskDef.taskClass, injected_flag_tasks):
+            configure_measurement('measurement')
+        if issubclass(taskDef.taskClass, CalibrateImageTask):
+            configure_measurement('psf_source_measurement')
+            configure_measurement('star_measurement')
+            pipeline.addConfigPython(
+                taskDef.label,
+                'config.star_selector["science"].flags.bad.extend(["base_PixelFlags_flag_injected_coreCenter"])',
             )
         if issubclass(taskDef.taskClass, CalibrateTask):
-            # pipeline.addConfigPython(
-            #     taskDef.label,
-            #     'config.astrometry.sourceSelector["science"].flags.bad.extend(["base_PixelFlags_flag_injected_coreCenter"])',
-            # )
             pipeline.addConfigPython(
                 taskDef.label,
-                'config.astrometry.sourceSelector["astrometry"].badFlags.extend(["base_PixelFlags_flag_injected_coreCenter"])',
+                'config.astrometry.sourceSelector["science"].flags.bad.extend(["base_PixelFlags_flag_injected_coreCenter"])',
             )
-
         conns = taskDef.connections
         input_types = _get_dataset_type_names(conns, conns.initInputs | conns.inputs)
         output_types = _get_dataset_type_names(conns, conns.initOutputs | conns.outputs)

@@ -67,7 +67,9 @@ the injection dataset type will also be updated to include the injection task.
         "-i",
         "--injection-pipeline",
         type=str,
-        help="Location of an injection pipeline definition YAML file.",
+        help="Location of an injection pipeline definition YAML file stub. If "
+        "this is not explicitly provided, an attempt to infer the injection "
+        "pipeline stub will be made using the injected dataset type name.",
         metavar="FILE",
     )
     parser.add_argument(
@@ -146,4 +148,4 @@ def main():
         pipeline = make_injection_pipeline(
             **{k: v for k, v in vars(args).items() if k not in ["filename", "overwrite"]}
         )
-        print(pipeline)
+        print("\n", pipeline, sep="")

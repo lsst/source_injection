@@ -35,7 +35,7 @@ def ingest_injection_catalog(
     table: Table | list[Table],
     band: str,
     output_collection: str,
-    dataset_type_name: str,
+    dataset_type_name: str = "injection_catalog",
     log_level: int = logging.INFO,
 ) -> list[DatasetRef]:
     """Ingest a source table into the butler.
@@ -58,7 +58,7 @@ def ingest_injection_catalog(
         Band associated with the input source table(s).
     output_collection : `str`
         Name of the output collection to ingest the consolidated table into.
-    dataset_type_name : `str`
+    dataset_type_name : `str`, optional
         Dataset type name for the ingested consolidated table.
     log_level : `int`, optional
         The log level to use for logging.

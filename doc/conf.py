@@ -11,3 +11,6 @@ project = "source_injection"
 html_theme_options["logotext"] = project  # noqa: F405
 html_title = project
 html_short_title = project
+
+# Update intersphinx configuration to allow finding butler/pipe_base entries.
+intersphinx_mapping["lsst"] = ("https://pipelines.lsst.io/v/daily/", None)  # noqa

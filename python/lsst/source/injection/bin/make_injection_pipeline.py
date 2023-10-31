@@ -110,6 +110,13 @@ the injection dataset type will also be updated to include the injection task.
         metavar="instrument",
     )
     parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        help="Config override for a task, in the format 'label:key=value'.",
+        action="append",
+    )
+    parser.add_argument(
         "-h",
         "--help",
         action="help",

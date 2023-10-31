@@ -107,10 +107,11 @@ def ingest_injection_catalog(
 
     # Log results and return.
     logger.info(
-        "Ingested %d %s band %s DatasetRef%s into the butler.",
+        "Ingested %d %s-band %s DatasetRef%s into: %s",
         len(dataset_refs),
         band,
         dataset_type_name,
         "" if len(dataset_refs) == 1 else "s",
+        output_collection,
     )
     return dataset_refs

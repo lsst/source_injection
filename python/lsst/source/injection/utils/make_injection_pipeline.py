@@ -37,6 +37,45 @@ def _get_dataset_type_names(conns, fields):
     return dataset_type_names
 
 
+def _parse_config_override(config_override: str) -> tuple[str, str, str]:
+    """Parse a config override string into a label, a key and a value.
+
+    Parameters
+    ----------
+    config_override : `str`
+        Config override string to parse.
+
+    Returns
+    -------
+    label : `str`
+        Label to override.
+    key : `str`
+        Key to override.
+    value : `str`
+        Value to override.
+
+    Raises
+    ------
+    TypeError
+        If the config override string cannot be parsed.
+    """
+    try:
+        label, keyvalue = config_override.split(":", 1)
+    except ValueError:
+        raise TypeError(
+            f"Unrecognized syntax for option 'config': '{config_override}' (does not match pattern "
+            "(?P<label>.+):(?P<value>.+=.+))"
+        ) from None
+    try:
+        key, value = keyvalue.split("=", 1)
+    except ValueError as e:
+        raise TypeError(
+            f"Could not parse key-value pair '{config_override}' using separator '=', with multiple values "
+            f"not allowed: {e}"
+        ) from None
+    return label, key, value
+
+
 def make_injection_pipeline(
     dataset_type_name: str,
     reference_pipeline: Pipeline | str,
@@ -52,6 +91,7 @@ def make_injection_pipeline(
     },
     prefix: str = "injected_",
     instrument: str | None = None,
+    config: str | list[str] | None = None,
     log_level: int = logging.INFO,
 ) -> Pipeline:
     """Make an expanded source injection pipeline.
@@ -96,10 +136,17 @@ def make_injection_pipeline(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
 
+    # Load the pipeline and apply config overrides, if supplied.
     if isinstance(reference_pipeline, str):
         pipeline = Pipeline.fromFile(reference_pipeline)
     else:
         pipeline = reference_pipeline
+    if config:
+        if isinstance(config, str):
+            config = [config]
+        for conf in config:
+            config_label, config_key, config_value = _parse_config_override(conf)
+            pipeline.addConfigOverride(config_label, config_key, config_value)
 
     # Add an instrument override, if provided.
     if instrument:

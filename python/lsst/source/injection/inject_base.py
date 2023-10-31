@@ -127,14 +127,14 @@ class BaseInjectConfig(PipelineTaskConfig, pipelineConnections=BaseInjectConnect
         doc="Column name for declination (in degrees).",
         default="dec",
     )
-    col_mag = Field[str](
-        doc="Column name for magnitude.",
-        default="mag",
-    )
     col_source_type = Field[str](
         doc="Column name for the source type used in the input catalog. Must match one of the surface "
         "brightness profiles defined by GalSim.",
         default="source_type",
+    )
+    col_mag = Field[str](
+        doc="Column name for magnitude.",
+        default="mag",
     )
     col_stamp = Field[str](
         doc="Column name to identify FITS file postage stamps for direct injection. The strings in this "

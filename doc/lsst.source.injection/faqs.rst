@@ -361,4 +361,4 @@ However, these naming conventions are not strictly enforced, and you are free to
 Where can I find more information on source injection?
 ======================================================
 
-For more information, consult a :ref:`quick reference guide <lsst.source.injection-ref>` or head back to the `main page <..>`_.
+For more information, consult a :ref:`quick reference guide <lsst.source.injection-ref>` or head back to the :ref:`main page <lsst.source.injection>`.

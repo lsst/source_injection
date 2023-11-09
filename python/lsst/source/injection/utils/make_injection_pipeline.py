@@ -198,9 +198,10 @@ def make_injection_pipeline(
             continue
 
         conns = taskDef.connections
-        input_types = _get_dataset_type_names(conns, conns.inputs)
-        output_types = _get_dataset_type_names(conns, conns.outputs)
+        input_types = _get_dataset_type_names(conns, conns.initInputs | conns.inputs)
+        output_types = _get_dataset_type_names(conns, conns.initOutputs | conns.outputs)
         all_connection_type_names |= input_types | output_types
+        # Identify the precursor task: allows appending inject task to subset.
         if dataset_type_name in output_types:
             precursor_injection_task_labels.add(taskDef.label)
         # If the task has any injected dataset type names as inputs, add all of
@@ -208,7 +209,7 @@ def make_injection_pipeline(
         if len(input_types & injected_types) > 0:
             injected_types |= output_types
             # Add the injection prefix to all affected dataset type names.
-            for field in conns.inputs | conns.outputs:
+            for field in conns.initInputs | conns.inputs | conns.initOutputs | conns.outputs:
                 if hasattr(taskDef.config.connections.ConnectionsClass, field):
                     # If the connection type is not dynamic, modify as usual.
                     if (conn_type := getattr(conns, field).name) in injected_types:

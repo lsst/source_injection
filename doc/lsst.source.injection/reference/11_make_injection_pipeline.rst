@@ -22,6 +22,12 @@ Typically, a pipeline reference file will be a pipeline that is being used to re
 Either the :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script or the associated :py:func:`~lsst.source.injection.make_injection_pipeline` Python function may be used to generate a fully qualified injection pipeline.
 Examples on this page illustrate the use of both methods.
 
+.. note::
+
+    Two dynamic source injection pipelines are automatically generated inside the ``drp_pipe`` repository.
+    These pipelines are located in the ``$DRP_PIPE_DIR/pipelines/HSC`` directory, facilitating source injection data reductions for the Hyper Suprime-Cam RC2 and RC2 subset datasets: ``DRP-RC2+injected_deepCoadd.yaml`` and ``DRP-RC2_subset+injected_deepCoadd.yaml``, respectively.
+    As indicated by the appended name, synthetic sources are injected into the ``deepCoadd`` dataset type.
+
 .. _lsst.source.injection-ref-make-stubs:
 
 Injection Pipeline Stubs

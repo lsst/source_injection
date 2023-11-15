@@ -300,11 +300,11 @@ The output PNG file from the above example is shown below:
 .. list-table::
     :widths: 1 1 1
 
-    * - .. image:: ../_assets/DRP-RC2+injection_step1_inject_exposure.png
+    * - .. image:: ../_assets/DRP-RC2\+injection_step1_inject_exposure.png
             :width: 100%
-      - .. image:: ../_assets/DRP-RC2+injection_step1_inject_visit.png
+      - .. image:: ../_assets/DRP-RC2\+injection_step1_inject_visit.png
             :width: 100%
-      - .. image:: ../_assets/DRP-RC2+injection_step3_inject_coadd.png
+      - .. image:: ../_assets/DRP-RC2\+injection_step3_inject_coadd.png
             :width: 100%
     * - The ``inject_exposure`` task merged into the HSC DRP-RC2 step 1 subset.
       - The ``inject_visit`` task merged into the HSC DRP-RC2 step 1 subset.

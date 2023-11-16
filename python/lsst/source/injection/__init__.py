@@ -33,6 +33,7 @@ inject_engine : Functions that assist in the manipulation of GalSim objects.
 utils : Utility functions for injection tasks.
 """
 
+from .consolidate_injected_catalogs import *  # noqa: F401,F403
 from .inject_base import *  # noqa: F401,F403
 from .inject_coadd import *  # noqa: F401,F403
 from .inject_engine import *  # noqa: F401,F403

@@ -61,14 +61,21 @@ The table below lists the available pipeline YAML stubs inside the ``$SOURCE_INJ
     * - Injection Task Graph
       - .. image:: ../_assets/inject_exposure.png
             :width: 100%
+            :target: ../../_images/inject_exposure.pdf
       - .. image:: ../_assets/inject_visit.png
             :width: 100%
+            :target: ../../_images/inject_visit.pdf
       - .. image:: ../_assets/inject_coadd.png
             :width: 100%
+            :target: ../../_images/inject_coadd.pdf
 
 .. _inject_exposure.yaml: https://github.com/lsst/source_injection/blob/main/pipelines/inject_exposure.yaml
 .. _inject_visit.yaml: https://github.com/lsst/source_injection/blob/main/pipelines/inject_visit.yaml
 .. _inject_coadd.yaml: https://github.com/lsst/source_injection/blob/main/pipelines/inject_coadd.yaml
+
+.. |inj_task_1| image:: ../_assets/inject_exposure.pdf
+.. |inj_task_2| image:: ../_assets/inject_visit.pdf
+.. |inj_task_3| image:: ../_assets/inject_coadd.pdf
 
 A source injection pipeline stub may always be specified directly, however, both the :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script and the :py:func:`~lsst.source.injection.make_injection_pipeline` Python function will attempt to infer the correct pipeline stub to use based on the injected dataset type specified.
 This inference is based on a match of the injected dataset type to a predefined list of common types and their associated pipeline stubs.
@@ -272,7 +279,7 @@ To help improve the layout of the graph, the ``unflatten`` preprocessing filter 
 .. code-block:: shell
 
     INPUT_PIPELINE=DRP-RC2+injection.yaml#step1
-    OUTPUT_FILE=DRP-RC2+injection_step1.png
+    OUTPUT_FILE=DRP-RC2_step1_with_injected_postISRCCD.png
     OUTPUT_EXT=${OUTPUT_FILE##*.}  # Resolves to: pdf/svg/png/jpg/...
 
     # Create the directed graph from an input pipeline.
@@ -284,31 +291,29 @@ To help improve the layout of the graph, the ``unflatten`` preprocessing filter 
     # Draw the directed graph.
     dot graph_post.dot -T$OUTPUT_EXT > $OUTPUT_FILE
 
-The output PNG file from the above example is shown below:
-
-.. figure:: ../_assets/DRP-RC2+injection_step1_inject_exposure.png
-    :name: DRP-RC2+injection_step1_inject_exposure
-    :alt: An example source injection pipeline, step 1.
-    :align: center
-    :width: 100%
-
-    ..
-
-    An example source injection pipeline using the HSC RC2 step 1 as a reference.
-    The ``inject_exposure`` task has been added to the pipeline immediately following the ``isr`` task.
+The output PNG from the above example injection into a ``postISRCCD`` type is shown below (left panel).
+Equivalent injections into ``calexp`` (central panel) and ``deepCoadd`` (right panel) types are also shown, for reference.
+Click the images for PDF versions.
 
 .. list-table::
     :widths: 1 1 1
 
-    * - .. image:: ../_assets/DRP-RC2\+injection_step1_inject_exposure.png
+    * - .. image:: ../_assets/DRP-RC2_step1_with_injected_postISRCCD.png
             :width: 100%
-      - .. image:: ../_assets/DRP-RC2\+injection_step1_inject_visit.png
+            :target: ../../_images/DRP-RC2_step1_with_injected_postISRCCD.pdf
+      - .. image:: ../_assets/DRP-RC2_step1_with_injected_calexp.png
             :width: 100%
-      - .. image:: ../_assets/DRP-RC2\+injection_step3_inject_coadd.png
+            :target: ../../_images/DRP-RC2_step1_with_injected_calexp.pdf
+      - .. image:: ../_assets/DRP-RC2_step3_with_injected_deepCoadd.png
             :width: 100%
+            :target: ../../_images/DRP-RC2_step3_with_injected_deepCoadd.pdf
     * - The ``inject_exposure`` task merged into the HSC DRP-RC2 step 1 subset.
       - The ``inject_visit`` task merged into the HSC DRP-RC2 step 1 subset.
       - The ``inject_coadd`` task merged into the HSC DRP-RC2 step 3 subset.
+
+.. |inj_pipe_1| image:: ../_assets/DRP-RC2_step1_with_injected_postISRCCD.pdf
+.. |inj_pipe_2| image:: ../_assets/DRP-RC2_step1_with_injected_calexp.pdf
+.. |inj_pipe_3| image:: ../_assets/DRP-RC2_step3_with_injected_deepCoadd.pdf
 
 .. _lsst.source.injection-ref-make-wrap:
 

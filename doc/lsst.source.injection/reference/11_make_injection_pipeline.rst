@@ -61,21 +61,18 @@ The table below lists the available pipeline YAML stubs inside the ``$SOURCE_INJ
     * - Injection Task Graph
       - .. image:: ../_assets/inject_exposure.png
             :width: 100%
-            :target: ../../_images/inject_exposure.pdf
       - .. image:: ../_assets/inject_visit.png
             :width: 100%
-            :target: ../../_images/inject_visit.pdf
       - .. image:: ../_assets/inject_coadd.png
             :width: 100%
-            :target: ../../_images/inject_coadd.pdf
+    * -
+      - :download:`PDF <../_assets/inject_exposure.pdf>`
+      - :download:`PDF <../_assets/inject_visit.pdf>`
+      - :download:`PDF <../_assets/inject_coadd.pdf>`
 
 .. _inject_exposure.yaml: https://github.com/lsst/source_injection/blob/main/pipelines/inject_exposure.yaml
 .. _inject_visit.yaml: https://github.com/lsst/source_injection/blob/main/pipelines/inject_visit.yaml
 .. _inject_coadd.yaml: https://github.com/lsst/source_injection/blob/main/pipelines/inject_coadd.yaml
-
-.. |inj_task_1| image:: ../_assets/inject_exposure.pdf
-.. |inj_task_2| image:: ../_assets/inject_visit.pdf
-.. |inj_task_3| image:: ../_assets/inject_coadd.pdf
 
 A source injection pipeline stub may always be specified directly, however, both the :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script and the :py:func:`~lsst.source.injection.make_injection_pipeline` Python function will attempt to infer the correct pipeline stub to use based on the injected dataset type specified.
 This inference is based on a match of the injected dataset type to a predefined list of common types and their associated pipeline stubs.
@@ -171,7 +168,7 @@ Visualize an Injection Pipeline
 
 Any pipeline YAML, including an injection pipeline, can be visualized to clarify exactly what the pipeline does.
 In this section we provide instructions for visualizing the ``DRP-RC2+injection.yaml`` pipeline generated in the above examples.
-Options for text-based outputs on the command line and rich PDF outputs are presented.
+Options for text-based outputs on the command line and rich rendered outputs are presented.
 The tasks and dataset types printed below are accurate as of ``w_2023_39`` of the LSST Science Pipelines.
 
 .. tip::
@@ -268,12 +265,13 @@ returning:
 
 .. _lsst.source.injection-ref-make-visualize-render:
 
-Render a pipeline in PDF format
--------------------------------
+Render a pipeline in graphical format
+-------------------------------------
 
-The ``pipetask build`` command can also output a pipeline in GraphViz DOT graph description language format.
-This format can be rendered into a PDF file using the ``dot`` command line tool.
-The snippet below converts the ``step1`` subset of the pipeline produced in the above example into a PDF file.
+The ``pipetask build`` command can also output a pipeline in the GraphViz DOT graph description language format.
+This format can be rendered into multiple visual formats such as PDF or PNG types using the ``dot`` command line tool.
+
+The snippet below converts the ``step1`` subset of the pipeline produced in the above example into a PNG file.
 To help improve the layout of the graph, the ``unflatten`` preprocessing filter is also used.
 
 .. code-block:: shell
@@ -292,28 +290,23 @@ To help improve the layout of the graph, the ``unflatten`` preprocessing filter 
     dot graph_post.dot -T$OUTPUT_EXT > $OUTPUT_FILE
 
 The output PNG from the above example injection into a ``postISRCCD`` type is shown below (left panel).
-Equivalent injections into ``calexp`` (central panel) and ``deepCoadd`` (right panel) types are also shown, for reference.
-Click the images for PDF versions.
+Equivalent graphs for injections into ``calexp`` (central panel) and ``deepCoadd`` (right panel) types are also shown, for reference.
 
 .. list-table::
     :widths: 1 1 1
 
     * - .. image:: ../_assets/DRP-RC2_step1_with_injected_postISRCCD.png
             :width: 100%
-            :target: ../../_images/DRP-RC2_step1_with_injected_postISRCCD.pdf
       - .. image:: ../_assets/DRP-RC2_step1_with_injected_calexp.png
             :width: 100%
-            :target: ../../_images/DRP-RC2_step1_with_injected_calexp.pdf
       - .. image:: ../_assets/DRP-RC2_step3_with_injected_deepCoadd.png
             :width: 100%
-            :target: ../../_images/DRP-RC2_step3_with_injected_deepCoadd.pdf
+    * - :download:`PDF <../_assets/DRP-RC2_step1_with_injected_postISRCCD.pdf>`
+      - :download:`PDF <../_assets/DRP-RC2_step1_with_injected_calexp.pdf>`
+      - :download:`PDF <../_assets/DRP-RC2_step3_with_injected_deepCoadd.pdf>`
     * - The ``inject_exposure`` task merged into the HSC DRP-RC2 step 1 subset.
       - The ``inject_visit`` task merged into the HSC DRP-RC2 step 1 subset.
       - The ``inject_coadd`` task merged into the HSC DRP-RC2 step 3 subset.
-
-.. |inj_pipe_1| image:: ../_assets/DRP-RC2_step1_with_injected_postISRCCD.pdf
-.. |inj_pipe_2| image:: ../_assets/DRP-RC2_step1_with_injected_calexp.pdf
-.. |inj_pipe_3| image:: ../_assets/DRP-RC2_step3_with_injected_deepCoadd.pdf
 
 .. _lsst.source.injection-ref-make-wrap:
 

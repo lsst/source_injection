@@ -26,7 +26,7 @@ __all__ = ["make_injection_pipeline"]
 import logging
 
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
-from lsst.pipe.base import Pipeline
+from lsst.pipe.base import LabelSpecifier, Pipeline
 
 
 def _get_dataset_type_names(conns, fields):
@@ -155,27 +155,17 @@ def make_injection_pipeline(
     # Remove all tasks which are not to be included in the injection pipeline.
     if isinstance(excluded_tasks, str):
         excluded_tasks = set(excluded_tasks.split(","))
-    not_excluded_tasks = set()
-    for task_label in excluded_tasks:
-        # First remove tasks from their host subsets, if present.
-        try:
-            host_subsets = pipeline.findSubsetsWithLabel(task_label)
-        except ValueError:
-            pass
-        else:
-            for host_subset in host_subsets:
-                pipeline.removeLabelFromSubset(host_subset, task_label)
-        # Then remove the task from the pipeline.
-        try:
-            pipeline.removeTask(task_label)
-        except KeyError:
-            not_excluded_tasks.add(task_label)
-    if len(not_excluded_tasks) > 0:
-        grammar = "Task" if len(not_excluded_tasks) == 1 else "Tasks"
+    all_tasks = {taskDef.label for taskDef in pipeline.toExpandedPipeline()}
+    preserved_tasks = all_tasks - excluded_tasks
+    label_specifier = LabelSpecifier(labels=preserved_tasks)
+    # EDIT mode removes tasks from parent subsets but keeps the subset itself.
+    pipeline = pipeline.subsetFromLabels(label_specifier, pipeline.PipelineSubsetCtrl.EDIT)
+    if len(not_found_tasks := excluded_tasks - all_tasks) > 0:
+        grammar = "Task" if len(not_found_tasks) == 1 else "Tasks"
         logger.warning(
             "%s marked for exclusion not found in the reference pipeline: %s.",
             grammar,
-            ", ".join(sorted(not_excluded_tasks)),
+            ", ".join(sorted(not_found_tasks)),
         )
 
     # Determine the set of dataset type names affected by source injection.

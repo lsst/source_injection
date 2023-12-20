@@ -39,8 +39,12 @@ This script takes a reference pipeline definition file in YAML format and
 prefixes all post-injection dataset type names with the injected prefix. If an
 optional injection pipeline definition YAML file is also provided, the
 injection task will be merged into the pipeline. Unless explicitly excluded,
-all subsets from the reference pipeline which contain the task which generates
+all subsets from the reference pipeline containing the task which generates
 the injection dataset type will also be updated to include the injection task.
+A series of new injection subsets will also be constructed. These new subsets
+are copies of existent subsets, but with tasks not directly impacted by source
+injection removed. Injected subsets will be the original existent subset name
+with the 'injected_' prefix prepended.
 """,
         formatter_class=SourceInjectionHelpFormatter,
         epilog="More information is available at https://pipelines.lsst.io.",

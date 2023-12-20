@@ -101,9 +101,13 @@ def make_injection_pipeline(
     an optional injection pipeline definition YAML file is also provided, the
     injection task will be merged into the pipeline.
 
-    Unless explicitly excluded, all subsets from the reference pipeline which
-    contain the task which generates the injection dataset type will also be
-    updated to include the injection task.
+    Unless explicitly excluded, all subsets from the reference pipeline
+    containing the task which generates the injection dataset type will also be
+    updated to include the injection task. A series of new injected subsets
+    will also be created. These new subsets are copies of existent subsets, but
+    containing only the tasks which are affected by source injection. New
+    injected subsets will be the original subset name with the prefix
+    'injected_' prepended.
 
     Parameters
     ----------
@@ -124,6 +128,8 @@ def make_injection_pipeline(
         Prefix to prepend to each affected post-injection dataset type name.
     instrument : `str`, optional
         Add instrument overrides. Must be a fully qualified class name.
+    config : `str` | `list` [`str`], optional
+        Config override for a task, in the format 'label:key=value'.
     log_level : `int`, optional
         The log level to use for logging.
 
@@ -169,6 +175,7 @@ def make_injection_pipeline(
         )
 
     # Determine the set of dataset type names affected by source injection.
+    injected_tasks = set()
     all_connection_type_names = set()
     injected_types = {dataset_type_name}
     precursor_injection_task_labels = set()
@@ -194,9 +201,11 @@ def make_injection_pipeline(
         # Identify the precursor task: allows appending inject task to subset.
         if dataset_type_name in output_types:
             precursor_injection_task_labels.add(taskDef.label)
-        # If the task has any injected dataset type names as inputs, add all of
-        # its outputs to the set of injected types.
+        # If the task has any injected dataset type names as inputs, add the
+        # task to a set of tasks touched by injection, and add all of the
+        # outputs of this task to the set of injected types.
         if len(input_types & injected_types) > 0:
+            injected_tasks |= {taskDef.label}
             injected_types |= output_types
             # Add the injection prefix to all affected dataset type names.
             for field in conns.initInputs | conns.inputs | conns.initOutputs | conns.outputs:
@@ -246,16 +255,15 @@ def make_injection_pipeline(
     # Merge the injection pipeline to the modified pipeline, if provided.
     if injection_pipeline:
         if isinstance(injection_pipeline, str):
-            pipeline2 = Pipeline.fromFile(injection_pipeline)
-        else:
-            pipeline2 = injection_pipeline
-        if len(pipeline2) != 1:
+            injection_pipeline = Pipeline.fromFile(injection_pipeline)
+        if len(injection_pipeline) != 1:
             raise RuntimeError(
-                f"The injection pipeline contains {len(pipeline2)} tasks; only one task is allowed."
+                f"The injection pipeline contains {len(injection_pipeline)} tasks; only 1 task is allowed."
             )
-        pipeline.mergePipeline(pipeline2)
+        pipeline.mergePipeline(injection_pipeline)
         # Loop over all injection tasks and modify the connection names.
-        for injection_taskDef in pipeline2.toExpandedPipeline():
+        for injection_taskDef in injection_pipeline.toExpandedPipeline():
+            injected_tasks |= {injection_taskDef.label}
             conns = injection_taskDef.connections
             pipeline.addConfigOverride(
                 injection_taskDef.label, "connections.input_exposure", dataset_type_name
@@ -270,5 +278,28 @@ def make_injection_pipeline(
                     for subset in precursor_subsets:
                         pipeline.addLabelToSubset(subset, injection_taskDef.label)
 
-    logger.info("Made an injection pipeline containing %d tasks.", len(pipeline))
+    # Create injected subsets.
+    injected_label_specifier = LabelSpecifier(labels=injected_tasks)
+    injected_pipeline = pipeline.subsetFromLabels(injected_label_specifier, pipeline.PipelineSubsetCtrl.EDIT)
+    injected_subset_labels = set()
+    for injected_subset in injected_pipeline.subsets.keys():
+        injected_subset_label = "injected_" + injected_subset
+        injected_subset_description = (
+            "All tasks from the '" + injected_subset + "' subset impacted by source injection."
+        )
+        if len(injected_subset_tasks := injected_pipeline.subsets[injected_subset]) > 0:
+            injected_subset_labels |= {injected_subset_label}
+            pipeline.addLabeledSubset(
+                injected_subset_label, injected_subset_description, injected_subset_tasks
+            )
+
+    grammar1 = "task" if len(pipeline) == 1 else "tasks"
+    grammar2 = "subset" if len(injected_subset_labels) == 1 else "subsets"
+    logger.info(
+        "Made an injection pipeline containing %d %s and %d new injected %s.",
+        len(pipeline),
+        grammar1,
+        len(injected_subset_labels),
+        grammar2,
+    )
     return pipeline

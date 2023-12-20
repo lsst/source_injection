@@ -231,9 +231,9 @@ def make_injection_pipeline(
             configure_star_selector("psf_measure_psf.starSelector['objectSize'].badFlags")
             configure_star_selector("measure_aperture_correction.sourceSelector['science'].flags.bad")
             configure_star_selector("star_selector['science'].flags.bad")
+            injected_core_flag = "base_PixelFlags_flag_injected_coreCenter"
             pipeline.addConfigPython(
-                taskDef.label,
-                'config.star_selector["science"].flags.bad.extend(["base_PixelFlags_flag_injected_coreCenter"])',
+                taskDef.label, f"config.star_selector['science'].flags.bad.extend([{injected_core_flag}])"
             )
 
         conns = taskDef.connections

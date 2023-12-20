@@ -138,7 +138,7 @@ Note that these parameter names must be written exactly as defined in the GalSim
     * - ``half_light_radius``
       - The half-light radius of the source.
     * - ``q``
-      - The major-to-minor axis ratio.
+      - The minor-to-major axis ratio.
     * - ``beta``
       - The position angle of the object (in degrees).
 

@@ -42,9 +42,13 @@ Tasks from the reference pipeline may either be removed or have specific configu
 
 .. note::
 
-    When using the above utilities to construct a fully qualified injection pipeline, any subsets will also be updated to include the injection task where appropriate.
+    When using the above utilities to construct a fully qualified injection pipeline, any existing subsets will also be updated to include the injection task where appropriate.
+    Furthermore, a series of ``injected_*`` subsets will be constructed.
+    These ``injected_*`` subsets are copies of existent subsets, but with any tasks not directly impacted by source injection removed.
+
     For example, if the ``inject_exposure.yaml`` pipeline stub is used to inject sources into a ``postISRCCD`` dataset type, the ``step1`` subset of the reference pipeline will be updated to also include the ``inject_exposure`` task.
     This behavior can be disabled by passing the ``-e`` argument on the command line, or setting ``exclude_subsets`` to ``True`` in Python.
+    Additionally, a new subset, ``injected_step1``, will also be created containing all tasks from the ``step1`` subset but with the ``isr`` task removed (as sources will be injected after this task has run).
 
 The table below lists the available pipeline YAML stubs inside the ``$SOURCE_INJECTION_DIR/pipelines`` directory and the dataset types they are designed to inject sources into:
 

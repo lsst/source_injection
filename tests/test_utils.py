@@ -26,6 +26,7 @@ import unittest
 import lsst.utils.tests
 from lsst.daf.butler.tests import makeTestCollection, makeTestRepo
 from lsst.daf.butler.tests.utils import makeTestTempDir, removeTestTempDir
+from lsst.obs.base.instrument_tests import DummyCam
 from lsst.pipe.base import Pipeline
 from lsst.source.injection import ExposureInjectTask, ingest_injection_catalog, make_injection_pipeline
 from lsst.source.injection.utils.test_utils import (
@@ -46,6 +47,8 @@ class SourceInjectionUtilsTestCase(TestCase):
         cls.root = makeTestTempDir(TEST_DIR)
         cls.creator_butler = makeTestRepo(cls.root)
         cls.writeable_butler = makeTestCollection(cls.creator_butler)
+        # Register an instrument so we can get some bands.
+        DummyCam().register(cls.writeable_butler.registry)
 
     @classmethod
     def tearDownClass(cls):
@@ -105,7 +108,7 @@ class SourceInjectionUtilsTestCase(TestCase):
         input_dataset_refs = ingest_injection_catalog(
             writeable_butler=self.writeable_butler,
             table=self.injection_catalog,
-            band="i",
+            band="g",
             output_collection="test_collection",
             dataset_type_name="injection_catalog",
             log_level=logging.DEBUG,

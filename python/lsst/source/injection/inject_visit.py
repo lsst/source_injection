@@ -30,6 +30,10 @@ from lsst.pipe.base.connectionTypes import Input, Output
 
 from .inject_base import BaseInjectConfig, BaseInjectConnections, BaseInjectTask
 
+import numpy as np
+from sklearn.linear_model import LinearRegression, RANSACRegressor
+from sklearn.metrics import mean_squared_error
+
 
 class VisitInjectConnections(  # type: ignore [call-arg]
     BaseInjectConnections,
@@ -96,6 +100,10 @@ class VisitInjectConfig(  # type: ignore [call-arg]
         dtype=bool,
         default=False,
     )
+    variance_fit_seed = Field[int](
+        doc="Seed for RANSAC fit of flux vs. variance.",
+        default=0
+    )
 
 
 class VisitInjectTask(BaseInjectTask):
@@ -103,6 +111,14 @@ class VisitInjectTask(BaseInjectTask):
 
     _DefaultName = "visitInjectTask"
     ConfigClass = VisitInjectConfig
+
+    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
+        self.log.info("Fitting flux vs. variance in each pixel.")
+        self.config.variance_scale = self.get_variance_scale(input_exposure)
+        self.log.info("Variance scale factor: %.3f",
+                     self.config.variance_scale)
+
+        return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs)
 
     def runQuantum(self, butler_quantum_context, input_refs, output_refs):
         inputs = butler_quantum_context.get(input_refs)
@@ -128,3 +144,33 @@ class VisitInjectTask(BaseInjectTask):
         input_keys = ["injection_catalogs", "input_exposure", "sky_map", "psf", "photo_calib", "wcs"]
         outputs = self.run(**{key: value for (key, value) in inputs.items() if key in input_keys})
         butler_quantum_context.put(outputs, output_refs)
+
+    def get_variance_scale(self, exposure):
+        x = exposure.image.array.flatten()
+        y = exposure.variance.array.flatten()
+
+        # Identify bad pixels
+        bad_pixels = ~np.isfinite(x) | ~np.isfinite(y)
+        # Replace bad pixel values with the image median
+        if np.sum(bad_pixels) > 0:
+            median_image_value = np.median(x)
+            median_variance_value = np.median(y)
+            x[bad_pixels] = median_image_value
+            y[bad_pixels] = median_variance_value
+
+        # Only fit pixels with at least this much inst flux
+        brightness_cutoff = 500
+        bright_pixels = x > brightness_cutoff
+
+        # Simple linear regression to establish MSE
+        linear = LinearRegression()
+        linear.fit(x[bright_pixels].reshape(-1, 1), y[bright_pixels])
+        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1,1)))
+
+        # RANSAC regression
+        ransac = RANSACRegressor(loss='squared_error',
+                                 residual_threshold=0.1 * linear_mse,
+                                 random_state=self.config.variance_fit_seed)
+        ransac.fit(x[bright_pixels].reshape(-1, 1), y[bright_pixels])
+
+        return float(ransac.estimator_.coef_[0])

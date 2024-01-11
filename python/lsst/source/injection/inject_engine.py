@@ -389,6 +389,9 @@ def inject_galsim_objects_into_exposure(
     mask_plane_name: str = "INJECTED",
     calib_flux_radius: float = 12.0,
     draw_size_max: int = 1000,
+    variance_scale: float = 0.0,
+    add_noise: bool = True,
+    noise_seed: int = 0,
     logger: Any | None = None,
 ) -> tuple[list[int], list[galsim.BoundsI], list[bool], list[bool]]:
     """Inject sources into given exposure using GalSim.
@@ -411,6 +414,14 @@ def inject_galsim_objects_into_exposure(
     draw_size_max : `int`
         Maximum allowed size of the drawn object. If the object is larger than
         this, the draw size will be clipped to this size.
+    variance_scale : `float`
+        Factor by which to multiply injected image flux to obtain the injected
+        variance level.
+    add_noise : `bool`
+        Whether to randomly vary the amount of injected image flux by an amount
+        consistent with the amount of injected variance.
+    noise_seed : `int`
+        Initial seed for random noise generation.
     logger : `lsst.utils.logging.LsstLogAdapter`, optional
         Logger to use for logging messages.
 
@@ -439,6 +450,7 @@ def inject_galsim_objects_into_exposure(
     bbox = exposure.getBBox()
     full_bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
     galsim_image = galsim.Image(exposure.image.array, bounds=full_bounds)
+    galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
     draw_sizes: list[int] = []
@@ -525,14 +537,20 @@ def inject_galsim_objects_into_exposure(
         # Inject the source if there is any overlap.
         if object_common_bounds.area() > 0:
             common_image = galsim_image[object_common_bounds]
+            common_variance = galsim_variance[object_common_bounds]
             offset = posd - object_common_bounds.true_center
+            # Attempt to draw a smooth version of the image,
+            # representing an expected light profile.
             # Note, for calexp injection, pixel is already part of the PSF and
             # for coadd injection, it's incorrect to include the output pixel.
             # So for both cases, we draw using method='no_pixel'.
+            image_template = common_image.copy()
+            draw_succeeded = False
             try:
-                conv.drawImage(
-                    common_image, add_to_image=True, offset=offset, wcs=galsim_wcs, method="no_pixel"
+                image_template = conv.drawImage(
+                    image_template, add_to_image=False, offset=offset, wcs=galsim_wcs, method="no_pixel"
                 )
+                draw_succeeded = True
             except GalSimFFTSizeError as err:
                 fft_size_errors[i] = True
                 if logger:
@@ -542,6 +560,49 @@ def inject_galsim_objects_into_exposure(
                         err,
                     )
                 continue
+
+            # If the smooth image can be drawn successfully,
+            # we can do everything else.
+            if draw_succeeded:
+                # Set a variance level in each pixel
+                # corresponding to the drawn light profile.
+                variance_template = image_template.copy()
+                variance_template *= variance_scale
+
+                if add_noise:
+                    # For generating noise,
+                    # variance must be meaningful.
+                    if np.sum(variance_template.array < 0) > 0:
+                        if logger:
+                            logger.debug(
+                                "Setting negative-variance pixels to 0 for noise generation."
+                            )
+                        variance_template.array[variance_template.array < 0] = 0
+                    if np.sum(~np.isfinite(variance_template.array)) > 0:
+                        if logger:
+                            logger.debug(
+                                "Setting non-finite-variance pixels to 0 for noise generation."
+                            )
+                        variance_template.array[~np.isfinite(variance_template.array)] = 0
+
+                    # Randomly vary the injected flux in each pixel,
+                    # consistent with the true variance level.
+                    rng = galsim.BaseDeviate(noise_seed)
+                    variable_noise = galsim.VariableGaussianNoise(rng, variance_template)
+                    image_template.addNoise(variable_noise)
+
+                    # Set an "estimated" variance level in each pixel,
+                    # corresponding to the randomly varied image.
+                    variance_template = image_template.copy()
+                    variance_template *= variance_scale
+
+                # Add the randomly varied synthetic image to the original
+                # image.
+                common_image += image_template
+                # Add the estimated variance of the injection to the original
+                # variance.
+                common_variance += variance_template
+
             common_box = Box2I(
                 Point2I(object_common_bounds.xmin, object_common_bounds.ymin),
                 Point2I(object_common_bounds.xmax, object_common_bounds.ymax),
@@ -563,5 +624,9 @@ def inject_galsim_objects_into_exposure(
         else:
             if logger:
                 logger.debug("No area overlap for object at %s; flagging and skipping.", sky_coords)
+
+        # Increment the seed so different noise is generated for different
+        # objects.
+        noise_seed += 1
 
     return draw_sizes, common_bounds, fft_size_errors, psf_compute_errors

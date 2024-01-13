@@ -23,15 +23,14 @@ from __future__ import annotations
 
 __all__ = ["CoaddInjectConnections", "CoaddInjectConfig", "CoaddInjectTask"]
 
+import numpy as np
 from lsst.pex.config import Field
 from lsst.pipe.base.connectionTypes import Input, Output
+from sklearn.cluster import KMeans
+from sklearn.linear_model import LinearRegression, RANSACRegressor
+from sklearn.metrics import mean_squared_error
 
 from .inject_base import BaseInjectConfig, BaseInjectConnections, BaseInjectTask
-
-import numpy as np
-from sklearn.linear_model import LinearRegression, RANSACRegressor
-from sklearn.cluster import KMeans
-from sklearn.metrics import mean_squared_error
 
 
 class CoaddInjectConnections(
@@ -118,6 +117,7 @@ class CoaddInjectConfig(  # type: ignore [call-arg]
         default=0
     )
 
+
 class CoaddInjectTask(BaseInjectTask):
     """Coadd-level class for injecting sources into images."""
 
@@ -128,7 +128,7 @@ class CoaddInjectTask(BaseInjectTask):
         self.log.info("Fitting flux vs. variance in each pixel.")
         self.config.variance_scale = self.get_variance_scale(input_exposure)
         self.log.info("Variance scale factor: %.6f",
-                     self.config.variance_scale)
+                      self.config.variance_scale)
 
         return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs)
 
@@ -159,7 +159,7 @@ class CoaddInjectTask(BaseInjectTask):
         # Simple linear regression to establish MSE.
         linear = LinearRegression()
         linear.fit(x.reshape(-1, 1), y)
-        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1,1)))
+        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1, 1)))
 
         # First RANSAC fit
         fit_results = []
@@ -179,22 +179,22 @@ class CoaddInjectTask(BaseInjectTask):
         kmeans = KMeans(n_clusters=self.config.n_clusters_1,
                         random_state=self.config.kmeans_seed_1,
                         n_init=10)
-        kmeans.fit(np.log(np.array([f[0] for f in fit_results if f[0] > 0])).reshape(-1,1))
+        kmeans.fit(np.log(np.array([f[0] for f in fit_results if f[0] > 0])).reshape(-1, 1))
         label_counts = [np.sum(kmeans.labels_ == idx) for idx in range(self.config.n_clusters_1)]
 
         # Recall one of the fits, chosen arbitrarily from those which are both
         # stable, according to the first k-means fit, and positive-slope.
         stable_fit_seeds = np.array([f[1] for f in fit_results if f[0] > 0])[
-                                 kmeans.labels_ == np.argmax(label_counts)]
+            kmeans.labels_ == np.argmax(label_counts)]
         if len(stable_fit_seeds == 0):
             # Throw a warning
             pass
         else:
             seed = stable_fit_seeds[0]
         ransac = RANSACRegressor(loss='squared_error',
-                             residual_threshold=self.config.threshold_scale_1 * linear_mse,
-                             max_trials=1000,
-                             random_state=seed)
+                                 residual_threshold=self.config.threshold_scale_1 * linear_mse,
+                                 max_trials=1000,
+                                 random_state=seed)
         ransac.fit(x.reshape(-1, 1), y)
 
         # Label the pixels with a "good" variance vs. flux relationship
@@ -222,32 +222,30 @@ class CoaddInjectTask(BaseInjectTask):
         kmeans = KMeans(n_clusters=self.config.n_clusters_2,
                         random_state=self.config.kmeans_seed_2,
                         n_init=10)
-        kmeans.fit(np.log(np.array([f[0] for f in fit_results if f[0] > 0])).reshape(-1,1))
+        kmeans.fit(np.log(np.array([f[0] for f in fit_results if f[0] > 0])).reshape(-1, 1))
         label_counts = [np.sum(kmeans.labels_ == idx) for idx in range(self.config.n_clusters_2)]
 
         # Recall one of the stable fits
         stable_fit_seeds = np.array([f[1] for f in fit_results if f[0] > 0])[
-                                 kmeans.labels_ == np.argmax(label_counts)]
+            kmeans.labels_ == np.argmax(label_counts)]
         if len(stable_fit_seeds == 0):
             # Throw a warning
             pass
         else:
             seed = stable_fit_seeds[0]
         ransac = RANSACRegressor(loss='squared_error',
-                             residual_threshold=self.config.threshold_scale_2 * linear_mse,
-                             max_trials=1000,
-                             random_state=seed)
+                                 residual_threshold=self.config.threshold_scale_2 * linear_mse,
+                                 max_trials=1000,
+                                 random_state=seed)
         ransac.fit(x[outlier_mask_1].reshape(-1, 1), y[outlier_mask_1])
 
         # Pixels with a "good" variance vs. flux relationship:
         # Union of the inliers from the first fit
         # together with the inliers from the second fit.
         x_good = np.concatenate(
-            (x[inlier_mask_1], x[outlier_mask_1][ransac.inlier_mask_]),
-            axis=None)
+            (x[inlier_mask_1], x[outlier_mask_1][ransac.inlier_mask_]), axis=None)
         y_good = np.concatenate(
-            (y[inlier_mask_1], y[outlier_mask_1][ransac.inlier_mask_]),
-            axis=None)
+            (y[inlier_mask_1], y[outlier_mask_1][ransac.inlier_mask_]), axis=None)
 
         # Fit all the good pixels with a simple least squares regression.
         linear = LinearRegression()

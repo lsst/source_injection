@@ -25,14 +25,13 @@ __all__ = ["VisitInjectConnections", "VisitInjectConfig", "VisitInjectTask"]
 
 from typing import cast
 
+import numpy as np
 from lsst.pex.config import Field
 from lsst.pipe.base.connectionTypes import Input, Output
-
-from .inject_base import BaseInjectConfig, BaseInjectConnections, BaseInjectTask
-
-import numpy as np
 from sklearn.linear_model import LinearRegression, RANSACRegressor
 from sklearn.metrics import mean_squared_error
+
+from .inject_base import BaseInjectConfig, BaseInjectConnections, BaseInjectTask
 
 
 class VisitInjectConnections(  # type: ignore [call-arg]
@@ -116,7 +115,7 @@ class VisitInjectTask(BaseInjectTask):
         self.log.info("Fitting flux vs. variance in each pixel.")
         self.config.variance_scale = self.get_variance_scale(input_exposure)
         self.log.info("Variance scale factor: %.3f",
-                     self.config.variance_scale)
+                      self.config.variance_scale)
 
         return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs)
 
@@ -165,7 +164,7 @@ class VisitInjectTask(BaseInjectTask):
         # Simple linear regression to establish MSE
         linear = LinearRegression()
         linear.fit(x[bright_pixels].reshape(-1, 1), y[bright_pixels])
-        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1,1)))
+        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1, 1)))
 
         # RANSAC regression
         ransac = RANSACRegressor(loss='squared_error',

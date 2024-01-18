@@ -574,15 +574,11 @@ def inject_galsim_objects_into_exposure(
                     # variance must be meaningful.
                     if np.sum(variance_template.array < 0) > 0:
                         if logger:
-                            logger.debug(
-                                "Setting negative-variance pixels to 0 for noise generation."
-                            )
+                            logger.debug("Setting negative-variance pixels to 0 for noise generation.")
                         variance_template.array[variance_template.array < 0] = 0
                     if np.sum(~np.isfinite(variance_template.array)) > 0:
                         if logger:
-                            logger.debug(
-                                "Setting non-finite-variance pixels to 0 for noise generation."
-                            )
+                            logger.debug("Setting non-finite-variance pixels to 0 for noise generation.")
                         variance_template.array[~np.isfinite(variance_template.array)] = 0
 
                     # Randomly vary the injected flux in each pixel,

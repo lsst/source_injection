@@ -99,10 +99,7 @@ class VisitInjectConfig(  # type: ignore [call-arg]
         dtype=bool,
         default=False,
     )
-    variance_fit_seed = Field[int](
-        doc="Seed for RANSAC fit of flux vs. variance.",
-        default=0
-    )
+    variance_fit_seed = Field[int](doc="Seed for RANSAC fit of flux vs. variance.", default=0)
 
 
 class VisitInjectTask(BaseInjectTask):
@@ -114,8 +111,7 @@ class VisitInjectTask(BaseInjectTask):
     def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
         self.log.info("Fitting flux vs. variance in each pixel.")
         self.config.variance_scale = self.get_variance_scale(input_exposure)
-        self.log.info("Variance scale factor: %.3f",
-                      self.config.variance_scale)
+        self.log.info("Variance scale factor: %.3f", self.config.variance_scale)
 
         return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs)
 
@@ -167,9 +163,11 @@ class VisitInjectTask(BaseInjectTask):
         linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1, 1)))
 
         # RANSAC regression
-        ransac = RANSACRegressor(loss='squared_error',
-                                 residual_threshold=0.1 * linear_mse,
-                                 random_state=self.config.variance_fit_seed)
+        ransac = RANSACRegressor(
+            loss="squared_error",
+            residual_threshold=0.1 * linear_mse,
+            random_state=self.config.variance_fit_seed,
+        )
         ransac.fit(x[bright_pixels].reshape(-1, 1), y[bright_pixels])
 
         return float(ransac.estimator_.coef_[0])

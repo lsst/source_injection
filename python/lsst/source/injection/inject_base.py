@@ -118,18 +118,17 @@ class BaseInjectConfig(PipelineTaskConfig, pipelineConnections=BaseInjectConnect
         default="",
     )
     variance_scale = Field[float](
-        doc="Number by which to multiply injected flux to obtain injected variance.",
-        default=0.0
+        doc="Number by which to multiply injected flux to obtain injected variance.", default=0.0
     )
     add_noise = Field[bool](
         doc="Whether to randomly vary the injected flux in each pixel by an amount consistent with "
         "the injected variance.",
-        default=True
+        default=True,
     )
     noise_seed = Field[int](
         doc="Initial seed for random noise generation. This value increments by 1 for each injected "
         "object, so each object has an independent noise realization.",
-        default=0
+        default=0,
     )
 
     # Custom column names.

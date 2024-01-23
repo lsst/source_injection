@@ -38,6 +38,7 @@ from scipy.stats import qmc
 def generate_injection_catalog(
     ra_lim: Sequence[float],
     dec_lim: Sequence[float],
+    mag_lim: Sequence[float] | None = None,
     wcs: SkyWcs = None,
     number: int = 1,
     density: int | None = None,
@@ -51,6 +52,7 @@ def generate_injection_catalog(
     supplied input parameters. The catalog is returned as an astropy Table.
 
     On-sky source positions are generated using the quasi-random Halton
+    sequence. Optional magnitudes may also be generated using the same
     sequence. By default, the Halton sequence is seeded using the product of
     the right ascension and declination limit ranges. This ensures that the
     same sequence is always generated for the same limits. This seed may be
@@ -74,6 +76,8 @@ def generate_injection_catalog(
         The right ascension limits of the catalog in degrees.
     dec_lim : `Sequence` [`float`]
         The declination limits of the catalog in degrees.
+    mag_lim : `Sequence` [`float`], optional
+        The magnitude limits of the catalog in magnitudes.
     wcs : `lsst.afw.geom.SkyWcs`, optional
         The WCS associated with these data. If not given or ``None`` (default),
         the catalog will be generated using Cartesian geometry.
@@ -170,6 +174,13 @@ def generate_injection_catalog(
     # minimize the potential for on-sky parameter correlations.
     rng = np.random.default_rng(hashed_seed)
     sky_coords = Table(rng.permutation(sky_coords))
+
+    # Generate random magnitudes if limits are specified
+    if mag_lim:
+        mag_sampler = qmc.Halton(d=1, seed=hashed_seed)
+        mag_sample = mag_sampler.random(n=len(param_table))
+        mags = Table(qmc.scale(mag_sample, mag_lim[0], mag_lim[1]), names=("mag",))
+        sky_coords = hstack([sky_coords, mags])
 
     # Generate the unique injection ID and construct the final table.
     source_id = np.concatenate([([i] * number) for i in range(int(len(param_table) / number))])

@@ -87,6 +87,15 @@ will be generated using Cartesian geometry.
         nargs=2,
     )
     parser_general.add_argument(
+        "-m",
+        "--mag-lim",
+        type=float,
+        help="The magnitude limits of the catalog in magnitudes.",
+        required=False,
+        metavar="VALUE",
+        nargs=2,
+    )
+    parser_general.add_argument(
         "-n",
         "--number",
         type=int,
@@ -265,11 +274,13 @@ def main():
         logger.info("Using WCS in %s for %s.", wcs_type_name, dataset_ref.dataId)
 
     # Generate the source injection catalog.
+    mag_lim = vars(args).get("mag_lim", None)
     density = vars(args).get("density", None)
     seed = vars(args).get("seed", None)
     table = generate_injection_catalog(
         ra_lim=args.ra_lim,
         dec_lim=args.dec_lim,
+        mag_lim=mag_lim,
         wcs=wcs,
         number=args.number,
         density=density,

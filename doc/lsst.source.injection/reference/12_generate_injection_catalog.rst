@@ -28,6 +28,7 @@ Catalog Parameters
 
 The tools on this page assist in generating a synthetic source injection catalog with sources quasi-randomly distributed across the sky.
 Sources will be scattered between the right ascension and declination limits specified by the user (using, for example, the `-a` and `-d` arguments respectively on the command line).
+Optional magnitudes may also be generated using the same sequence (using the `-m` command line argument).
 The number of repeats for each unique combination of profile parameters is also specified by the user (using, for example, the `-n` argument on the command line).
 
 .. tip::
@@ -165,6 +166,7 @@ Generate an Injection Catalog on the Command Line
 
 The :doc:`generate_injection_catalog <../scripts/generate_injection_catalog>` command line script is used to generate a synthetic source injection catalog.
 This script takes a number of arguments, including the right ascension and declination limits of the quasi-randomly generated positions and the number of sources to inject.
+Optional magnitudes may also be generated using the same random sequence.
 More information on the arguments accepted by this script may be found by running:
 
 .. code-block:: shell

@@ -117,9 +117,6 @@ class BaseInjectConfig(PipelineTaskConfig, pipelineConnections=BaseInjectConnect
         doc="String to prefix to the entries in the *col_stamp* column, for example, a directory path.",
         default="",
     )
-    variance_scale = Field[float](
-        doc="Number by which to multiply injected flux to obtain injected variance.", default=0.0
-    )
     add_noise = Field[bool](
         doc="Whether to randomly vary the injected flux in each pixel by an amount consistent with "
         "the injected variance.",
@@ -176,7 +173,7 @@ class BaseInjectTask(PipelineTask):
     _DefaultName = "baseInjectTask"
     ConfigClass = BaseInjectConfig
 
-    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
+    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs, variance_scale=0.0):
         """Inject sources into an image.
 
         Parameters
@@ -192,6 +189,9 @@ class BaseInjectTask(PipelineTask):
             Photometric calibration used to calibrate injected sources.
         wcs : `lsst.afw.geom.SkyWcs`
             WCS used to calibrate injected sources.
+        variance_scale : `float`
+            Scale by which to multiply injected image flux to determine the
+            amount of variance to add.
 
         Returns
         -------

@@ -90,6 +90,14 @@ class CoaddInjectConfig(  # type: ignore [call-arg]
         "in terms of squared error, than this multiple of the initial linear MSE.",
         default=0.1,
     )
+    max_trials_1 = Field[int](
+        doc="Maximum number of trials the first RANSAC fit is allowed to run.",
+        default=1000,
+    )
+    max_trials_2 = Field[int](
+        doc="Maximum number of trials the second RANSAC fit is allowed to run.",
+        default=1000,
+    )
     variance_fit_seed_1 = Field[int](doc="Seed for first RANSAC fit of flux vs. variance.", default=0)
     variance_fit_seed_2 = Field[int](doc="Seed for second RANSAC fit of flux vs. variance.", default=0)
     n_clusters_1 = Field[int](
@@ -104,6 +112,14 @@ class CoaddInjectConfig(  # type: ignore [call-arg]
     )
     kmeans_seed_1 = Field[int](doc="Seed for first round of k-means clustering.", default=0)
     kmeans_seed_2 = Field[int](doc="Seed for second round of k-means clustering.", default=0)
+    kmeans_n_init_1 = Field[int](
+        doc="Number of times the first k-means clustering is run with different initial centroids.",
+        default=10,
+    )
+    kmeans_n_init_2 = Field[int](
+        doc="Number of times the second k-means clustering is run with different initial centroids.",
+        default=10,
+    )
 
 
 class CoaddInjectTask(BaseInjectTask):
@@ -114,10 +130,10 @@ class CoaddInjectTask(BaseInjectTask):
 
     def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
         self.log.info("Fitting flux vs. variance in each pixel.")
-        self.config.variance_scale = self.get_variance_scale(input_exposure)
-        self.log.info("Variance scale factor: %.6f", self.config.variance_scale)
+        variance_scale = self.get_variance_scale(input_exposure)
+        self.log.info("Variance scale factor: %.6f", variance_scale)
 
-        return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs)
+        return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs, variance_scale)
 
     def runQuantum(self, butler_quantum_context, input_refs, output_refs):
         inputs = butler_quantum_context.get(input_refs)
@@ -130,23 +146,48 @@ class CoaddInjectTask(BaseInjectTask):
         outputs = self.run(**{key: value for (key, value) in inputs.items() if key in input_keys})
         butler_quantum_context.put(outputs, output_refs)
 
-    def get_variance_scale(self, exposure):
-        x = exposure.image.array.flatten()
-        y = exposure.variance.array.flatten()
+    """
+    Establish the variance scale by a linear fit of variance vs. flux.
+    In practice we see that most pixels in a coadd obey a consistent, simple
+    linear relationship between variance and flux, but a small sample do not.
 
-        # Identify bad pixels
-        bad_pixels = ~np.isfinite(x) | ~np.isfinite(y)
-        # Replace bad pixel values with the image median
-        if np.sum(bad_pixels) > 0:
-            median_image_value = np.median(x)
-            median_variance_value = np.median(y)
-            x[bad_pixels] = median_image_value
-            y[bad_pixels] = median_variance_value
+    To identify and hence ignore these odd pixels, we perform two rounds of
+    RANSAC fits. RANSAC iteratively finds a least-squares straight line fit on
+    random subsamples of points, while identifying outliers. The inlier pixels
+    from a first RANSAC fit tend to be regions of empty space and the extreme
+    outer edges of galaxies, while the outliers tend to be the inner regions of
+    galaxies.
+
+    We can pick up some more pixels in the galaxies by running a second RANSCAC
+    fit on just the outliers of the first fit. In the second round, the inliers
+    tend to be the bulk of the galaxy, while the outliers are the innermost
+    cores of galaxies. In practice, the inliers from this second round tend to
+    have a qualitatively similar variance-vs-flux relationship to the outliers
+    from the first fit and do not strongly alter the final variance scale we
+    get; while the outliers from the second round are truly wild and should
+    clearly be omitted from a simple linear fit.
+
+    In both rounds, random variation of the points sampled by the RANSAC fit
+    causes the fitted slope and intercept to vary, and sometimes the fit can
+    settle on a pathological sample of points as its inliers. We try to avoid
+    such pathologies by running each fit multiple times with different seeds,
+    and using K-Means clustering on the resulting slopes to identify the most
+    stable value.
+    """
+
+    def get_variance_scale(self, exposure):
+        flux = exposure.image.array.ravel()
+        var = exposure.variance.array.ravel()
+
+        # Ignore pixels with nan or infinite values
+        good_pixels = np.isfinite(flux) & np.isfinite(var)
+        flux = flux[good_pixels]
+        var = var[good_pixels]
 
         # Simple linear regression to establish MSE.
         linear = LinearRegression()
-        linear.fit(x.reshape(-1, 1), y)
-        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1, 1)))
+        linear.fit(flux.reshape(-1, 1), var)
+        linear_mse = mean_squared_error(var, linear.predict(flux.reshape(-1, 1)))
 
         # First RANSAC fit
         fit_results = []
@@ -156,10 +197,10 @@ class CoaddInjectTask(BaseInjectTask):
             ransac = RANSACRegressor(
                 loss="squared_error",
                 residual_threshold=self.config.threshold_scale_1 * linear_mse,
-                max_trials=1000,
+                max_trials=self.config.max_trials_1,
                 random_state=seed,
             )
-            ransac.fit(x.reshape(-1, 1), y)
+            ransac.fit(flux.reshape(-1, 1), var)
             # Remember fit results
             slope = ransac.estimator_.coef_[0]
             fit_results.append((slope, seed))
@@ -167,7 +208,9 @@ class CoaddInjectTask(BaseInjectTask):
         # K-means cluster the first round of fits,
         # to find the most stable results.
         kmeans = KMeans(
-            n_clusters=self.config.n_clusters_1, random_state=self.config.kmeans_seed_1, n_init=10
+            n_clusters=self.config.n_clusters_1,
+            random_state=self.config.kmeans_seed_1,
+            n_init=self.config.kmeans_n_init_1,
         )
         kmeans.fit(np.log(np.array([f[0] for f in fit_results if f[0] > 0])).reshape(-1, 1))
         label_counts = [np.sum(kmeans.labels_ == idx) for idx in range(self.config.n_clusters_1)]
@@ -178,17 +221,23 @@ class CoaddInjectTask(BaseInjectTask):
             kmeans.labels_ == np.argmax(label_counts)
         ]
         if len(stable_fit_seeds == 0):
-            # Throw a warning
-            pass
-        else:
-            seed = stable_fit_seeds[0]
+            # No positive-slope fit found.
+            # Allow the fitted slope to be negative but throw a warning.
+            self.log.warning(
+                "No positive-slope result in the first round of "
+                "RANSAC fits. Proceeding with a negative-slope fit."
+            )
+            stable_fit_seeds = np.array([f[1] for f in fit_results])[
+                kmeans.labels_ == np.argmax(label_counts)
+            ]
+        seed = stable_fit_seeds[0]
         ransac = RANSACRegressor(
             loss="squared_error",
             residual_threshold=self.config.threshold_scale_1 * linear_mse,
-            max_trials=1000,
+            max_trials=self.config.max_trials_1,
             random_state=seed,
         )
-        ransac.fit(x.reshape(-1, 1), y)
+        ransac.fit(flux.reshape(-1, 1), var)
 
         # Label the pixels with a "good" variance vs. flux relationship
         # (the inliers), together with the ones that are further from a simple
@@ -205,10 +254,10 @@ class CoaddInjectTask(BaseInjectTask):
             ransac = RANSACRegressor(
                 loss="squared_error",
                 residual_threshold=self.config.threshold_scale_2 * linear_mse,
-                max_trials=1000,
+                max_trials=self.config.max_trials_2,
                 random_state=seed,
             )
-            ransac.fit(x[outlier_mask_1].reshape(-1, 1), y[outlier_mask_1])
+            ransac.fit(flux[outlier_mask_1].reshape(-1, 1), var[outlier_mask_1])
             # Remember fit results
             slope = ransac.estimator_.coef_[0]
             fit_results.append((slope, seed))
@@ -216,7 +265,9 @@ class CoaddInjectTask(BaseInjectTask):
         # K-Means cluster the second round of fits,
         # to find the most stable result
         kmeans = KMeans(
-            n_clusters=self.config.n_clusters_2, random_state=self.config.kmeans_seed_2, n_init=10
+            n_clusters=self.config.n_clusters_2,
+            random_state=self.config.kmeans_seed_2,
+            n_init=self.config.kmeans_n_init_2,
         )
         kmeans.fit(np.log(np.array([f[0] for f in fit_results if f[0] > 0])).reshape(-1, 1))
         label_counts = [np.sum(kmeans.labels_ == idx) for idx in range(self.config.n_clusters_2)]
@@ -226,27 +277,43 @@ class CoaddInjectTask(BaseInjectTask):
             kmeans.labels_ == np.argmax(label_counts)
         ]
         if len(stable_fit_seeds == 0):
-            # Throw a warning
-            pass
-        else:
-            seed = stable_fit_seeds[0]
+            # No positive-slope fit found.
+            # Allow the fitted slope to be negative but throw a warning.
+            self.log.warning(
+                "No positive-slope result in the second round of "
+                "RANSAC fits. Proceeding with a negative-slope fit."
+            )
+            stable_fit_seeds = np.array([f[1] for f in fit_results])[
+                kmeans.labels_ == np.argmax(label_counts)
+            ]
+        seed = stable_fit_seeds[0]
         ransac = RANSACRegressor(
             loss="squared_error",
             residual_threshold=self.config.threshold_scale_2 * linear_mse,
-            max_trials=1000,
+            max_trials=self.config.max_trials_2,
             random_state=seed,
         )
-        ransac.fit(x[outlier_mask_1].reshape(-1, 1), y[outlier_mask_1])
+        ransac.fit(flux[outlier_mask_1].reshape(-1, 1), var[outlier_mask_1])
 
         # Pixels with a "good" variance vs. flux relationship:
         # Union of the inliers from the first fit
         # together with the inliers from the second fit.
-        x_good = np.concatenate((x[inlier_mask_1], x[outlier_mask_1][ransac.inlier_mask_]), axis=None)
-        y_good = np.concatenate((y[inlier_mask_1], y[outlier_mask_1][ransac.inlier_mask_]), axis=None)
+        flux_good = np.concatenate(
+            (flux[inlier_mask_1], flux[outlier_mask_1][ransac.inlier_mask_]),
+            axis=None,
+        )
+        var_good = np.concatenate(
+            (var[inlier_mask_1], var[outlier_mask_1][ransac.inlier_mask_]),
+            axis=None,
+        )
 
         # Fit all the good pixels with a simple least squares regression.
         linear = LinearRegression()
-        linear.fit(x_good.reshape(-1, 1), y_good)
+        linear.fit(flux_good.reshape(-1, 1), var_good)
+        variance_scale = float(linear.coef_[0])
+
+        if variance_scale < 0:
+            self.log.warning("Slope of final variance vs. flux fit is negative.")
 
         # Return the slope of the final fit.
-        return float(linear.coef_[0])
+        return variance_scale

@@ -545,12 +545,10 @@ def inject_galsim_objects_into_exposure(
             # for coadd injection, it's incorrect to include the output pixel.
             # So for both cases, we draw using method='no_pixel'.
             image_template = common_image.copy()
-            draw_succeeded = False
             try:
                 image_template = conv.drawImage(
                     image_template, add_to_image=False, offset=offset, wcs=galsim_wcs, method="no_pixel"
                 )
-                draw_succeeded = True
             except GalSimFFTSizeError as err:
                 fft_size_errors[i] = True
                 if logger:
@@ -561,43 +559,40 @@ def inject_galsim_objects_into_exposure(
                     )
                 continue
 
-            # If the smooth image can be drawn successfully,
-            # we can do everything else.
-            if draw_succeeded:
-                # Set a variance level in each pixel
-                # corresponding to the drawn light profile.
+            # Set a variance level in each pixel
+            # corresponding to the drawn light profile.
+            variance_template = image_template.copy()
+            variance_template *= variance_scale
+
+            if add_noise:
+                # For generating noise,
+                # variance must be meaningful.
+                if np.any(variance_template.array < 0):
+                    if logger:
+                        logger.debug("Setting negative-variance pixels to 0 for noise generation.")
+                    variance_template.array[variance_template.array < 0] = 0
+                if np.any(~np.isfinite(variance_template.array)):
+                    if logger:
+                        logger.debug("Setting non-finite-variance pixels to 0 for noise generation.")
+                    variance_template.array[~np.isfinite(variance_template.array)] = 0
+
+                # Randomly vary the injected flux in each pixel,
+                # consistent with the true variance level.
+                rng = galsim.BaseDeviate(noise_seed)
+                variable_noise = galsim.VariableGaussianNoise(rng, variance_template)
+                image_template.addNoise(variable_noise)
+
+                # Set an "estimated" variance level in each pixel,
+                # corresponding to the randomly varied image.
                 variance_template = image_template.copy()
                 variance_template *= variance_scale
 
-                if add_noise:
-                    # For generating noise,
-                    # variance must be meaningful.
-                    if np.sum(variance_template.array < 0) > 0:
-                        if logger:
-                            logger.debug("Setting negative-variance pixels to 0 for noise generation.")
-                        variance_template.array[variance_template.array < 0] = 0
-                    if np.sum(~np.isfinite(variance_template.array)) > 0:
-                        if logger:
-                            logger.debug("Setting non-finite-variance pixels to 0 for noise generation.")
-                        variance_template.array[~np.isfinite(variance_template.array)] = 0
-
-                    # Randomly vary the injected flux in each pixel,
-                    # consistent with the true variance level.
-                    rng = galsim.BaseDeviate(noise_seed)
-                    variable_noise = galsim.VariableGaussianNoise(rng, variance_template)
-                    image_template.addNoise(variable_noise)
-
-                    # Set an "estimated" variance level in each pixel,
-                    # corresponding to the randomly varied image.
-                    variance_template = image_template.copy()
-                    variance_template *= variance_scale
-
-                # Add the randomly varied synthetic image to the original
-                # image.
-                common_image += image_template
-                # Add the estimated variance of the injection to the original
-                # variance.
-                common_variance += variance_template
+            # Add the randomly varied synthetic image to the original
+            # image.
+            common_image += image_template
+            # Add the estimated variance of the injection to the original
+            # variance.
+            common_variance += variance_template
 
             common_box = Box2I(
                 Point2I(object_common_bounds.xmin, object_common_bounds.ymin),

@@ -99,6 +99,11 @@ class VisitInjectConfig(  # type: ignore [call-arg]
         dtype=bool,
         default=False,
     )
+    brightness_cutoff = Field[float](
+        doc="Ignore pixels with image flux below this level when fitting flux vs. variance.",
+        dtype=float,
+        default=500,
+    )
     variance_fit_seed = Field[int](doc="Seed for RANSAC fit of flux vs. variance.", default=0)
 
 
@@ -110,10 +115,10 @@ class VisitInjectTask(BaseInjectTask):
 
     def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
         self.log.info("Fitting flux vs. variance in each pixel.")
-        self.config.variance_scale = self.get_variance_scale(input_exposure)
-        self.log.info("Variance scale factor: %.3f", self.config.variance_scale)
+        variance_scale = self.get_variance_scale(input_exposure)
+        self.log.info("Variance scale factor: %.3f", variance_scale)
 
-        return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs)
+        return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs, variance_scale)
 
     def runQuantum(self, butler_quantum_context, input_refs, output_refs):
         inputs = butler_quantum_context.get(input_refs)
@@ -140,27 +145,38 @@ class VisitInjectTask(BaseInjectTask):
         outputs = self.run(**{key: value for (key, value) in inputs.items() if key in input_keys})
         butler_quantum_context.put(outputs, output_refs)
 
-    def get_variance_scale(self, exposure):
-        x = exposure.image.array.flatten()
-        y = exposure.variance.array.flatten()
+    """
+    Establish the variance scale by a linear fit of variance vs. flux.
+    In practice we see that most pixels in a coadd obey a consistent, simple
+    linear relationship between variance and flux, but a small sample skews
+    somewhat away from linearity and results in a fit that seems less than
+    ideal.
 
-        # Identify bad pixels
-        bad_pixels = ~np.isfinite(x) | ~np.isfinite(y)
-        # Replace bad pixel values with the image median
-        if np.sum(bad_pixels) > 0:
-            median_image_value = np.median(x)
-            median_variance_value = np.median(y)
-            x[bad_pixels] = median_image_value
-            y[bad_pixels] = median_variance_value
+    To identify and hence ignore these odd pixels, we perform a RANSAC fit.
+    RANSAC iteratively finds a least-squares straight line fit on random
+    subsamples of points, while identifying outliers. The final results tend to
+    be much more stable and outlier-robust than a simple linear fit.
+
+    Pixels below a flux level specified by brightness_cutoff are more likely to
+    have wild outliers, so for simplicity's sake we simply ignore them.
+    """
+
+    def get_variance_scale(self, exposure):
+        flux = exposure.image.array.ravel()
+        var = exposure.variance.array.ravel()
+
+        # Ignore pixels with nan or infinite values
+        good_pixels = np.isfinite(flux) & np.isfinite(var)
+        flux = flux[good_pixels]
+        var = var[good_pixels]
 
         # Only fit pixels with at least this much inst flux
-        brightness_cutoff = 500
-        bright_pixels = x > brightness_cutoff
+        bright_pixels = flux > self.config.brightness_cutoff
 
         # Simple linear regression to establish MSE
         linear = LinearRegression()
-        linear.fit(x[bright_pixels].reshape(-1, 1), y[bright_pixels])
-        linear_mse = mean_squared_error(y, linear.predict(x.reshape(-1, 1)))
+        linear.fit(flux[bright_pixels].reshape(-1, 1), var[bright_pixels])
+        linear_mse = mean_squared_error(var, linear.predict(flux.reshape(-1, 1)))
 
         # RANSAC regression
         ransac = RANSACRegressor(
@@ -168,6 +184,10 @@ class VisitInjectTask(BaseInjectTask):
             residual_threshold=0.1 * linear_mse,
             random_state=self.config.variance_fit_seed,
         )
-        ransac.fit(x[bright_pixels].reshape(-1, 1), y[bright_pixels])
+        ransac.fit(flux[bright_pixels].reshape(-1, 1), var[bright_pixels])
+        variance_scale = float(ransac.estimator_.coef_[0])
 
-        return float(ransac.estimator_.coef_[0])
+        if variance_scale < 0:
+            self.log.warning("Slope of final variance vs. flux fit is negative.")
+
+        return variance_scale

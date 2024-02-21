@@ -27,6 +27,10 @@ import logging
 
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
+from lsst.pipe.tasks.calibrate import CalibrateTask
+from lsst.pipe.tasks.calibrateImage import CalibrateImageTask
+from lsst.pipe.tasks.characterizeImage import CharacterizeImageTask
+from lsst.pipe.tasks.multiBand import MeasureMergedCoaddSourcesTask
 
 
 def _get_dataset_type_names(conns, fields):
@@ -193,6 +197,51 @@ def make_injection_pipeline(
                 taskDef.label, "connections.outputName", prefix + taskDef.config.connections.outputName
             )
             continue
+
+        def configure_measurement(name):
+            """Configure this task's SingleFrameMeasurement subtask (called
+            ``name`` in the task config) to include INJECTED and INJECTED_CORE
+            in the catalog pixel flags.
+            """
+            pipeline.addConfigPython(
+                taskDef.label,
+                f"config.{name}.plugins['base_PixelFlags'].masksFpAnywhere.extend(['INJECTED'])",
+            )
+            pipeline.addConfigPython(
+                taskDef.label,
+                f"config.{name}.plugins['base_PixelFlags'].masksFpCenter.extend(['INJECTED_CORE'])",
+            )
+
+        def configure_star_selector(name):
+            """Configure a star selector in this task (where ``name`` is the
+            name of the bad flag list in a star selector task or subtask) to
+            add the injected_coreCenter pixel flag to the list of bad flags.
+            """
+            pipeline.addConfigPython(
+                taskDef.label,
+                f"config.{name}.extend(['base_PixelFlags_flag_injected_coreCenter'])",
+            )
+
+        # Add injection flag configs to relevant tasks.
+        # TODO: do this for coadds
+        injected_flag_tasks = (CharacterizeImageTask, CalibrateTask, MeasureMergedCoaddSourcesTask)
+        if issubclass(taskDef.taskClass, injected_flag_tasks):
+            configure_measurement("measurement")
+        if issubclass(taskDef.taskClass, CharacterizeImageTask):
+            configure_star_selector("measurePsf.starSelector['objectSize'].badFlags")
+            configure_star_selector("measureApCorr.sourceSelector['science'].flags.bad")
+        if issubclass(taskDef.taskClass, CalibrateTask):
+            configure_star_selector("astrometry.sourceSelector['science'].flags.bad")
+        if issubclass(taskDef.taskClass, CalibrateImageTask):
+            configure_measurement("psf_source_measurement")
+            configure_measurement("star_measurement")
+            configure_star_selector("psf_measure_psf.starSelector['objectSize'].badFlags")
+            configure_star_selector("measure_aperture_correction.sourceSelector['science'].flags.bad")
+            configure_star_selector("star_selector['science'].flags.bad")
+            injected_core_flag = "base_PixelFlags_flag_injected_coreCenter"
+            pipeline.addConfigPython(
+                taskDef.label, f"config.star_selector['science'].flags.bad.extend([{injected_core_flag}])"
+            )
 
         conns = taskDef.connections
         input_types = _get_dataset_type_names(conns, conns.initInputs | conns.inputs)

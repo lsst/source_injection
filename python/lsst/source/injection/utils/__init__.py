@@ -33,6 +33,7 @@ generate_injection_catalog : Generate source injection catalogs.
 ingest_injection_catalog : Ingest source injection catalogs into a repository.
 """
 
+from .consolidate_injected_deepCoadd_catalogs import *  # noqa: F401,F403
 from .generate_injection_catalog import *  # noqa: F401,F403
 from .ingest_injection_catalog import *  # noqa: F401,F403
 from .make_injection_pipeline import *  # noqa: F401,F403

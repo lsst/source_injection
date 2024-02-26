@@ -81,8 +81,7 @@ def make_injection_pipeline(
     reference_pipeline: Pipeline | str,
     injection_pipeline: Pipeline | str | None = None,
     exclude_subsets: bool = False,
-    excluded_tasks: set[str]
-    | str = {
+    excluded_tasks: set[str] | str = {
         "jointcal",
         "gbdesAstrometricFit",
         "fgcmBuildFromIsolatedStars",

@@ -28,7 +28,13 @@ from lsst.daf.butler.tests import makeTestCollection, makeTestRepo
 from lsst.daf.butler.tests.utils import makeTestTempDir, removeTestTempDir
 from lsst.obs.base.instrument_tests import DummyCam
 from lsst.pipe.base import Pipeline
-from lsst.source.injection import ExposureInjectTask, ingest_injection_catalog, make_injection_pipeline
+from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
+from lsst.source.injection import (
+    ExposureInjectTask,
+    consolidate_injected_deepCoadd_catalogs,
+    ingest_injection_catalog,
+    make_injection_pipeline,
+)
 from lsst.source.injection.utils.test_utils import (
     make_test_exposure,
     make_test_injection_catalog,
@@ -49,11 +55,15 @@ class SourceInjectionUtilsTestCase(TestCase):
         cls.writeable_butler = makeTestCollection(cls.creator_butler)
         # Register an instrument so we can get some bands.
         DummyCam().register(cls.writeable_butler.registry)
+        skyMapConfig = RingsSkyMapConfig()
+        skyMapConfig.numRings = 3
+        cls.skyMap = RingsSkyMap(config=skyMapConfig)
 
     @classmethod
     def tearDownClass(cls):
         del cls.writeable_butler
         del cls.creator_butler
+        del cls.skyMap
         removeTestTempDir(cls.root)
 
     def setUp(self):
@@ -63,11 +73,15 @@ class SourceInjectionUtilsTestCase(TestCase):
             self.exposure.getBBox(),
         )
         self.reference_pipeline = make_test_reference_pipeline()
+        self.injected_catalog = self.injection_catalog.copy()
+        self.injected_catalog.add_columns(cols=[0, 0], names=["injection_draw_size", "injection_flag"])
+        self.injected_catalog["injection_flag"][:5] = 1
 
     def tearDown(self):
         del self.exposure
         del self.injection_catalog
         del self.reference_pipeline
+        del self.injected_catalog
 
     def test_generate_injection_catalog(self):
         self.assertEqual(len(self.injection_catalog), 30)
@@ -123,6 +137,43 @@ class SourceInjectionUtilsTestCase(TestCase):
         self.assertEqual(input_ids, output_ids)
         injected_catalog = self.writeable_butler.get(input_dataset_refs[0])
         self.assertTrue(all(self.injection_catalog == injected_catalog))
+
+    def test_consolidate_injected_catalogs(self):
+        catalog_dict = {"g": self.injected_catalog, "r": self.injected_catalog}
+        output_catalog = consolidate_injected_deepCoadd_catalogs(
+            catalog_dict=catalog_dict,
+            skymap=self.skyMap,
+            tract=9,
+            pixel_match_radius=0.1,
+            get_catalogs_from_butler=False,
+            col_ra="ra",
+            col_dec="dec",
+            col_mag="mag",
+            isPatchInnerKey="injected_isPatchInner",
+            isTractInnerKey="injected_isTractInner",
+            isPrimaryKey="injected_isPrimary",
+            injectionKey="injection_flag",
+        )
+        self.assertEqual(len(output_catalog), 30)
+        expected_columns = {
+            "injection_id",
+            "injected_id",
+            "ra",
+            "dec",
+            "source_type",
+            "g_mag",
+            "r_mag",
+            "injection_draw_size",
+            "injection_flag",
+            "injected_isPatchInner",
+            "injected_isTractInner",
+            "injected_isPrimary",
+        }
+        self.assertEqual(set(output_catalog.columns), expected_columns)
+        self.assertEqual(sum(output_catalog["injection_flag"]), 5)
+        self.assertEqual(sum(output_catalog["injected_isPatchInner"]), 30)
+        self.assertEqual(sum(output_catalog["injected_isTractInner"]), 30)
+        self.assertEqual(sum(output_catalog["injected_isPrimary"]), 25)
 
 
 class MemoryTestCase(MemoryTestCase):

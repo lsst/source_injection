@@ -25,8 +25,11 @@ __all__ = ["VisitInjectConnections", "VisitInjectConfig", "VisitInjectTask"]
 
 from typing import cast
 
+import numpy as np
 from lsst.pex.config import Field
 from lsst.pipe.base.connectionTypes import Input, Output
+from sklearn.linear_model import LinearRegression, RANSACRegressor
+from sklearn.metrics import mean_squared_error
 
 from .inject_base import BaseInjectConfig, BaseInjectConnections, BaseInjectTask
 
@@ -96,6 +99,12 @@ class VisitInjectConfig(  # type: ignore [call-arg]
         dtype=bool,
         default=False,
     )
+    brightness_cutoff = Field[float](
+        doc="Ignore pixels with image flux below this level when fitting flux vs. variance.",
+        dtype=float,
+        default=500,
+    )
+    variance_fit_seed = Field[int](doc="Seed for RANSAC fit of flux vs. variance.", default=0)
 
 
 class VisitInjectTask(BaseInjectTask):
@@ -103,6 +112,13 @@ class VisitInjectTask(BaseInjectTask):
 
     _DefaultName = "visitInjectTask"
     ConfigClass = VisitInjectConfig
+
+    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
+        self.log.info("Fitting flux vs. variance in each pixel.")
+        variance_scale = self.get_variance_scale(input_exposure)
+        self.log.info("Variance scale factor: %.3f", variance_scale)
+
+        return super().run(injection_catalogs, input_exposure, psf, photo_calib, wcs, variance_scale)
 
     def runQuantum(self, butler_quantum_context, input_refs, output_refs):
         inputs = butler_quantum_context.get(input_refs)
@@ -128,3 +144,50 @@ class VisitInjectTask(BaseInjectTask):
         input_keys = ["injection_catalogs", "input_exposure", "sky_map", "psf", "photo_calib", "wcs"]
         outputs = self.run(**{key: value for (key, value) in inputs.items() if key in input_keys})
         butler_quantum_context.put(outputs, output_refs)
+
+    """
+    Establish the variance scale by a linear fit of variance vs. flux.
+    In practice we see that most pixels in a coadd obey a consistent, simple
+    linear relationship between variance and flux, but a small sample skews
+    somewhat away from linearity and results in a fit that seems less than
+    ideal.
+
+    To identify and hence ignore these odd pixels, we perform a RANSAC fit.
+    RANSAC iteratively finds a least-squares straight line fit on random
+    subsamples of points, while identifying outliers. The final results tend to
+    be much more stable and outlier-robust than a simple linear fit.
+
+    Pixels below a flux level specified by brightness_cutoff are more likely to
+    have wild outliers, so for simplicity's sake we simply ignore them.
+    """
+
+    def get_variance_scale(self, exposure):
+        flux = exposure.image.array.ravel()
+        var = exposure.variance.array.ravel()
+
+        # Ignore pixels with nan or infinite values
+        good_pixels = np.isfinite(flux) & np.isfinite(var)
+        flux = flux[good_pixels]
+        var = var[good_pixels]
+
+        # Only fit pixels with at least this much inst flux
+        bright_pixels = flux > self.config.brightness_cutoff
+
+        # Simple linear regression to establish MSE
+        linear = LinearRegression()
+        linear.fit(flux[bright_pixels].reshape(-1, 1), var[bright_pixels])
+        linear_mse = mean_squared_error(var, linear.predict(flux.reshape(-1, 1)))
+
+        # RANSAC regression
+        ransac = RANSACRegressor(
+            loss="squared_error",
+            residual_threshold=0.1 * linear_mse,
+            random_state=self.config.variance_fit_seed,
+        )
+        ransac.fit(flux[bright_pixels].reshape(-1, 1), var[bright_pixels])
+        variance_scale = float(ransac.estimator_.coef_[0])
+
+        if variance_scale < 0:
+            self.log.warning("Slope of final variance vs. flux fit is negative.")
+
+        return variance_scale

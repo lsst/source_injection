@@ -117,6 +117,16 @@ class BaseInjectConfig(PipelineTaskConfig, pipelineConnections=BaseInjectConnect
         doc="String to prefix to the entries in the *col_stamp* column, for example, a directory path.",
         default="",
     )
+    add_noise = Field[bool](
+        doc="Whether to randomly vary the injected flux in each pixel by an amount consistent with "
+        "the injected variance.",
+        default=True,
+    )
+    noise_seed = Field[int](
+        doc="Initial seed for random noise generation. This value increments by 1 for each injected "
+        "object, so each object has an independent noise realization.",
+        default=0,
+    )
 
     # Custom column names.
     col_ra = Field[str](
@@ -163,7 +173,7 @@ class BaseInjectTask(PipelineTask):
     _DefaultName = "baseInjectTask"
     ConfigClass = BaseInjectConfig
 
-    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
+    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs, variance_scale=0.0):
         """Inject sources into an image.
 
         Parameters
@@ -179,6 +189,9 @@ class BaseInjectTask(PipelineTask):
             Photometric calibration used to calibrate injected sources.
         wcs : `lsst.afw.geom.SkyWcs`
             WCS used to calibrate injected sources.
+        variance_scale : `float`
+            Scale by which to multiply injected image flux to determine the
+            amount of variance to add.
 
         Returns
         -------
@@ -267,6 +280,9 @@ class BaseInjectTask(PipelineTask):
                 mask_plane_name=self.config.mask_plane_name,
                 calib_flux_radius=self.config.calib_flux_radius,
                 draw_size_max=10000,  # TODO: replace draw_size logic with GS logic.
+                variance_scale=self.config.variance_scale,
+                add_noise=self.config.add_noise,
+                noise_seed=self.config.noise_seed,
                 logger=self.log,
             )
             # Add inject_galsim_objects_into_exposure outputs into output cat.

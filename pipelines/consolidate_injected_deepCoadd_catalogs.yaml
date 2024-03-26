@@ -1,0 +1,4 @@
+description: Consolidation of per-band and per-patch catalogs into tract-level catalogs.
+tasks:
+  consolidate_injected_catalogs:
+    class: lsst.source.injection.utils.consolidate_injected_deepCoadd_catalogs.ConsolidateInjectedCatalogsTask

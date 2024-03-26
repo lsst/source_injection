@@ -72,6 +72,12 @@ The step 1 subset will have had the ``inject_exposure`` task (:lsst-task:`~lsst.
 
     If injection outputs have already been generated within your butler repository, you should omit this flag from your run command to prevent any accidental registration of unwanted dataset types.
 
+.. note::
+
+    Similar to ``stepN`` subsets are ``injected_stepN`` subsets.
+    These only run tasks including and after the injection task.
+    The ``injected_stepN`` subsets can save memory and runtime if the tasks prior to injection have already been run.
+
 Assuming processing completes successfully, the ``injected_postISRCCD`` and associated ``injected_postISRCCD_catalog`` will be written to the butler repository.
 Various downstream ``step1`` data products should also exist, including the ``injected_calexp`` dataset type (see example images below).
 

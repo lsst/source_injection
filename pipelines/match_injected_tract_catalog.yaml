@@ -1,0 +1,36 @@
+description: Match tract-level injected_deepCoadd_catalog datasets to injected_objectTable_tract datasets.
+tasks:
+  consolidate_injected_catalogs:
+    class: lsst.source.injection.utils.consolidate_injected_deepCoadd_catalogs.ConsolidateInjectedCatalogsTask
+  match_object_to_truth:
+    class: lsst.pipe.tasks.match_tract_catalog.MatchTractCatalogTask
+    config:
+      connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
+      connections.name_input_cat_target: injected_objectTable_tract
+      match_tract_catalog.column_ref_order: "i_mag"
+      match_tract_catalog.columns_ref_meas: ["ra", "dec"]
+      match_tract_catalog.columns_target_meas: ["coord_ra", "coord_dec"]
+      match_tract_catalog.columns_target_err: ["coord_raErr", "coord_decErr"]
+      match_tract_catalog.columns_ref_copy: ["injected_id", "source_type"]
+      match_tract_catalog.columns_target_copy: ["objectId"]
+      match_tract_catalog.columns_ref_select_true: ["injected_isPatchInner"]
+      match_tract_catalog.columns_ref_select_false: ["injection_flag"]
+      match_tract_catalog.columns_target_select_true: ["detect_isPatchInner", "detect_isDeblendedSource"]
+      match_tract_catalog.columns_target_select_false: ["merge_peak_sky"]
+      match_tract_catalog.match_n_finite_min: 2
+      match_tract_catalog.order_ascending: true
+      python: |
+        # Target settings are likely common to all object tables
+        from lsst.pipe.tasks.match_tract_catalog_probabilistic import MatchTractCatalogProbabilisticTask
+        config.match_tract_catalog.retarget(MatchTractCatalogProbabilisticTask)
+  compare_object_to_truth:
+    class: lsst.pipe.tasks.diff_matched_tract_catalog.DiffMatchedTractCatalogTask
+    config:
+      connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
+      connections.name_input_cat_target: injected_objectTable_tract
+      column_ref_extended: source_type
+      columns_ref_copy: ["g_mag", "r_mag", "i_mag", "z_mag", "y_mag"]
+      columns_target_coord_err: ["coord_raErr", "coord_decErr"]
+      columns_target_copy: ["patch", "refExtendedness"]
+      include_unmatched: true
+      output_statistics: false

@@ -23,18 +23,11 @@ from __future__ import annotations
 
 __all__ = ["make_injection_pipeline"]
 
+import itertools
 import logging
 
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
-
-
-def _get_dataset_type_names(conns, fields):
-    """Return the name of a connection's dataset type."""
-    dataset_type_names = set()
-    for field in fields:
-        dataset_type_names.add(getattr(conns, field).name)
-    return dataset_type_names
 
 
 def _parse_config_override(config_override: str) -> tuple[str, str, str]:
@@ -160,7 +153,7 @@ def make_injection_pipeline(
     # Remove all tasks which are not to be included in the injection pipeline.
     if isinstance(excluded_tasks, str):
         excluded_tasks = set(excluded_tasks.split(","))
-    all_tasks = {taskDef.label for taskDef in pipeline.toExpandedPipeline()}
+    all_tasks = set(pipeline.task_labels)
     preserved_tasks = all_tasks - excluded_tasks
     label_specifier = LabelSpecifier(labels=preserved_tasks)
     # EDIT mode removes tasks from parent subsets but keeps the subset itself.
@@ -179,46 +172,62 @@ def make_injection_pipeline(
     injected_types = {dataset_type_name}
     precursor_injection_task_labels = set()
     # Loop over all tasks in the pipeline.
-    for taskDef in pipeline.toExpandedPipeline():
-        # Add override for Analysis Tools taskDefs. Connections in Analysis
+    for task_node in pipeline.to_graph().tasks.values():
+        # Add override for Analysis Tools tasks. Connections in Analysis
         # Tools are dynamically assigned, and so are not able to be modified in
         # the same way as a static connection. Instead, we add a config
         # override here to the connections.outputName field. This field is
         # prepended to all Analysis Tools connections, and so will prepend the
         # injection prefix to all plot/metric outputs. Further processing of
-        # this taskDef will be skipped thereafter.
-        if issubclass(taskDef.taskClass, AnalysisPipelineTask):
+        # this task will be skipped thereafter.
+        if issubclass(task_node.task_class, AnalysisPipelineTask):
             pipeline.addConfigOverride(
-                taskDef.label, "connections.outputName", prefix + taskDef.config.connections.outputName
+                task_node.label,
+                "connections.outputName",
+                prefix + task_node.config.connections.outputName,
             )
             continue
 
-        conns = taskDef.connections
-        input_types = _get_dataset_type_names(conns, conns.initInputs | conns.inputs)
-        output_types = _get_dataset_type_names(conns, conns.initOutputs | conns.outputs)
+        input_types = {
+            read_edge.dataset_type_name
+            for read_edge in itertools.chain(task_node.inputs.values(), task_node.init.inputs.values())
+        }
+        output_types = {
+            write_edge.dataset_type_name
+            for write_edge in itertools.chain(task_node.outputs.values(), task_node.init.outputs.values())
+        }
         all_connection_type_names |= input_types | output_types
         # Identify the precursor task: allows appending inject task to subset.
         if dataset_type_name in output_types:
-            precursor_injection_task_labels.add(taskDef.label)
+            precursor_injection_task_labels.add(task_node.label)
         # If the task has any injected dataset type names as inputs, add the
         # task to a set of tasks touched by injection, and add all of the
         # outputs of this task to the set of injected types.
         if len(input_types & injected_types) > 0:
-            injected_tasks |= {taskDef.label}
+            injected_tasks |= {task_node.label}
             injected_types |= output_types
             # Add the injection prefix to all affected dataset type names.
-            for field in conns.initInputs | conns.inputs | conns.initOutputs | conns.outputs:
-                if hasattr(taskDef.config.connections.ConnectionsClass, field):
+            for edge in itertools.chain(
+                task_node.inputs.values(),
+                task_node.outputs.values(),
+                task_node.init.inputs.values(),
+                task_node.init.outputs.values(),
+            ):
+                if hasattr(task_node.config.connections.ConnectionsClass, edge.connection_name):
                     # If the connection type is not dynamic, modify as usual.
-                    if (conn_type := getattr(conns, field).name) in injected_types:
-                        pipeline.addConfigOverride(taskDef.label, "connections." + field, prefix + conn_type)
+                    if edge.parent_dataset_type_name in injected_types:
+                        pipeline.addConfigOverride(
+                            task_node.label,
+                            "connections." + edge.connection_name,
+                            prefix + edge.dataset_type_name,
+                        )
                 else:
                     # Add log warning if the connection type is dynamic.
                     logger.warning(
                         "Dynamic connection %s in task %s is not supported here. This connection will "
                         "neither be modified nor merged into the output injection pipeline.",
-                        field,
-                        taskDef.label,
+                        edge.connection_name,
+                        task_node.label,
                     )
     # Raise if the injected dataset type does not exist in the pipeline.
     if dataset_type_name not in all_connection_type_names:
@@ -261,21 +270,18 @@ def make_injection_pipeline(
             )
         pipeline.mergePipeline(injection_pipeline)
         # Loop over all injection tasks and modify the connection names.
-        for injection_taskDef in injection_pipeline.toExpandedPipeline():
-            injected_tasks |= {injection_taskDef.label}
-            conns = injection_taskDef.connections
+        for injection_task_label in injection_pipeline.task_labels:
+            injected_tasks.add(injection_task_label)
+            pipeline.addConfigOverride(injection_task_label, "connections.input_exposure", dataset_type_name)
             pipeline.addConfigOverride(
-                injection_taskDef.label, "connections.input_exposure", dataset_type_name
-            )
-            pipeline.addConfigOverride(
-                injection_taskDef.label, "connections.output_exposure", prefix + dataset_type_name
+                injection_task_label, "connections.output_exposure", prefix + dataset_type_name
             )
             # Optionally update subsets to include the injection task.
             if not exclude_subsets:
                 for label in precursor_injection_task_labels:
                     precursor_subsets = pipeline.findSubsetsWithLabel(label)
                     for subset in precursor_subsets:
-                        pipeline.addLabelToSubset(subset, injection_taskDef.label)
+                        pipeline.addLabelToSubset(subset, injection_task_label)
 
     # Create injected subsets.
     injected_label_specifier = LabelSpecifier(labels=injected_tasks)

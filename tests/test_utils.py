@@ -100,23 +100,28 @@ class SourceInjectionUtilsTestCase(TestCase):
             instrument="lsst.obs.subaru.HyperSuprimeCam",
             log_level=logging.DEBUG,
         )
-        expanded_pipeline = merged_pipeline.toExpandedPipeline()
+        pipeline_graph = merged_pipeline.to_graph()
         expected_subset_tasks = ["isr", "inject_exposure", "characterizeImage"]
         merged_task_subsets = [merged_pipeline.findSubsetsWithLabel(x) for x in expected_subset_tasks]
         self.assertEqual(len(merged_task_subsets), len(expected_subset_tasks))
-        for taskDef in expanded_pipeline:
-            conns = taskDef.connections
-            if taskDef.label == "isr":
-                self.assertEqual(conns.outputExposure.name, "postISRCCD")
-            elif taskDef.label == "inject_exposure":
-                self.assertEqual(conns.input_exposure.name, "postISRCCD")
-                self.assertEqual(conns.output_exposure.name, "injected_postISRCCD")
-                self.assertEqual(conns.output_catalog.name, "injected_postISRCCD_catalog")
-            elif taskDef.label == "characterizeImage":
-                self.assertEqual(conns.exposure.name, "injected_postISRCCD")
-                self.assertEqual(conns.characterized.name, "injected_icExp")
-                self.assertEqual(conns.backgroundModel.name, "injected_icExpBackground")
-                self.assertEqual(conns.sourceCat.name, "injected_icSrc")
+        for task_node in pipeline_graph.tasks.values():
+            if task_node.label == "isr":
+                self.assertEqual(task_node.outputs["outputExposure"].dataset_type_name, "postISRCCD")
+            elif task_node.label == "inject_exposure":
+                self.assertEqual(task_node.inputs["input_exposure"].dataset_type_name, "postISRCCD")
+                self.assertEqual(
+                    task_node.outputs["output_exposure"].dataset_type_name, "injected_postISRCCD"
+                )
+                self.assertEqual(
+                    task_node.outputs["output_catalog"].dataset_type_name, "injected_postISRCCD_catalog"
+                )
+            elif task_node.label == "characterizeImage":
+                self.assertEqual(task_node.inputs["exposure"].dataset_type_name, "injected_postISRCCD")
+                self.assertEqual(task_node.outputs["characterized"].dataset_type_name, "injected_icExp")
+                self.assertEqual(
+                    task_node.outputs["backgroundModel"].dataset_type_name, "injected_icExpBackground"
+                )
+                self.assertEqual(task_node.outputs["sourceCat"].dataset_type_name, "injected_icSrc")
 
     def test_ingest_injection_catalog(self):
         input_dataset_refs = ingest_injection_catalog(

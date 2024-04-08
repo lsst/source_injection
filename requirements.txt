@@ -2,8 +2,8 @@ numpy >= 1.17
 astropy >= 4.0
 esutil >= 0.6.9
 galsim >= 2.4.6
-git+https://github.com/lsst/daf_butler@main#egg=lsst-daf-butler
-git+https://github.com/lsst/pipe_base@tickets/DM-40441#egg=lsst-pipe-base
-git+https://github.com/lsst/utils@tickets/DM-40441#egg=lsst-utils
-git+https://github.com/lsst/resources@main#egg=lsst-resources
-git+https://github.com/lsst/pex_config@main#egg=lsst-pex-config
+lsst-daf-butler @ git+https://github.com/lsst/daf_butler@main
+lsst-pipe-base @ git+https://github.com/lsst/pipe_base@main
+lsst-utils @ git+https://github.com/lsst/utils@main
+lsst-resources @ git+https://github.com/lsst/resources@main
+lsst-pex-config @ git+https://github.com/lsst/pex_config@main

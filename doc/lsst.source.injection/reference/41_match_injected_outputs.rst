@@ -47,28 +47,32 @@ Matching
 ========
 
 Now that we have our consolidated tract-level injected catalog and a reference tract-level standard catalog, we can move on to matching these two sets of catalogs together.
-.. TODO: add info for match_object_to_truth and compare_object_to_truth
+
 The matching tasks are ``MatchTractCatalogTask`` and ``DiffMatchedTractCatalogTask``.
 The first task performs a spatial probablistic match with minimal flag cuts, and the second computes any relevant statistics.
-These tasks are located under ``pipelines/match_injected_tract_catalog.yaml#match_object_to_truth,compare_object_to_truth`` alongside ``ConsolidateInjectedCatalogsTask``.
+These tasks are located in the ``pipelines/match_injected_tract_catalog.yaml`` pipeline definition file, with the labels ``match_object_to_truth`` and ``compare_object_to_truth``.
 The pipeline graph for the consolidation and matching process is shown below:
-      ○  injected_deepCoadd_catalog
-      │
-    ○ │  skyMap
-    ├─┤
-    │ ■  consolidate_injected_catalogs
-    │ │
-    │ ○  injected_deepCoadd_catalog_tract
-    │ │
-  ○ │ │  injected_objectTable_tract
-╭─┼─┼─┤
-■ │ │ │  match_object_to_truth
-│ │ │ │
-◍ │ │ │  match_target_injected_deepCoadd_catalog_tract_injected_objectTable_tract, match_ref_injected_deepCoadd_catalog_tract_injected_objectTable_tract
-╰─┴─┴─┤
-      ■  compare_object_to_truth
-      │
-      ○  matched_injected_deepCoadd_catalog_tract_injected_objectTable_tract
+
+.. code::
+
+        ○  injected_deepCoadd_catalog
+        │
+      ○ │  skyMap
+      ├─┤
+      │ ■  consolidate_injected_catalogs
+      │ │
+      │ ○  injected_deepCoadd_catalog_tract
+      │ │
+    ○ │ │  injected_objectTable_tract
+  ╭─┼─┼─┤
+  ■ │ │ │  match_object_to_truth
+  │ │ │ │
+  ◍ │ │ │  match_target_injected_deepCoadd_catalog_tract_injected_objectTable_tract, match_ref_injected_deepCoadd_catalog_tract_injected_objectTable_tract
+  ╰─┴─┴─┤
+        ■  compare_object_to_truth
+        │
+        ○  matched_injected_deepCoadd_catalog_tract_injected_objectTable_tract
+
 Matching two tract-level catalogs can be done trivially with a ``pipetask run`` command as below:
 
 .. code::
@@ -98,7 +102,7 @@ Matching two tract-level catalogs can be done trivially with a ``pipetask run`` 
 
     Within ``pipelines/match_injected_tract_catalog.yaml`` there are various config options for pre-matching flag selections, columns to copy from the reference and target catalogs, etc.
 
-Vizualize the matched catalog and compute metrics
+Visualize the matched catalog and compute metrics
 =================================================
 
 One metric to determine the quality of an injection run is completeness, or the ratio of matched sources to injected sources.
@@ -107,6 +111,7 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
 .. code-block:: python
 
     from lsst.daf.butler import Butler
+    import astropy.units as u
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -123,7 +128,8 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
 
     # Make a completeness plot.
     band="i"
-    mag = f"refcat_{band}_mag"
+    flux = f"ref_{band}_flux"
+    mags = ((data[flux] * u.nJy).to(u.ABmag)).value
     fig, axLeft = plt.subplots()
     axRight = axLeft.twinx()
     axLeft.tick_params(axis="y", labelcolor="C0")
@@ -131,8 +137,8 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
     axLeft.set_xlabel("PSF Magnitude (mag)")
     axRight.set_ylabel("Number of Sources")
     nInput, bins, _ = axRight.hist(
-        data[mag],
-        range=(np.nanmin(data[mag]), np.nanmax(data[mag])),
+        mags,
+        range=(np.nanmin(mags), np.nanmax(mags)),
         bins=121,
         log=True,
         histtype="step",
@@ -140,8 +146,8 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
         color="black",
     )
     nOutput, _, _ = axRight.hist(
-        data[mag][matched],
-        range=(np.nanmin(data[mag][matched]), np.nanmax(data[mag][matched])),
+        mags[matched],
+        range=(np.nanmin(mags[matched]), np.nanmax(mags[matched])),
         bins=bins,
         log=True,
         histtype="step",
@@ -149,7 +155,6 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
         color="grey",
     )
     xlims = plt.gca().get_xlim()
-
     # Find bin where the fraction recovered first falls below 0.5
     lessThanHalf = np.where((nOutput / nInput < 0.5))[0]
     if len(lessThanHalf) == 0:
@@ -170,7 +175,6 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
         alpha=0.5,
         zorder=10,
     )
-    # Add useful information to the plot.
     bboxDict = dict(boxstyle="round", facecolor="white", alpha=0.75)
     info50 = "Magnitude at 50% recovered: {:0.2f}".format(mag50)
     axLeft.text(0.3, 0.15, info50, transform=fig.transFigure, bbox=bboxDict, zorder=11)

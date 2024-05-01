@@ -28,6 +28,7 @@ tasks:
     config:
       connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
       connections.name_input_cat_target: injected_objectTable_tract
+      column_matched_prefix_ref: "ref_"
       column_ref_extended: source_type
       # TODO: Remove as part of DM-44139
       columns_ref_mag_to_nJy: {

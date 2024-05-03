@@ -204,7 +204,7 @@ def generate_galsim_objects(
         elif source_data["source_type"] == "Trail":
             object = make_galsim_trail(source_data, wcs, sky_coords, inst_flux)
         else:
-            object = make_galsim_object(source_data, source_data["source_type"], inst_flux)
+            object = make_galsim_object(source_data, source_data["source_type"], inst_flux, logger)
 
         yield sky_coords, pixel_coords, draw_size, object
 
@@ -213,6 +213,7 @@ def make_galsim_object(
     source_data: dict[str, Any],
     source_type: str,
     inst_flux: float,
+    logger: Any | None = None,
 ) -> galsim.gsobject.GSObject:
     """Make a generic GalSim object from a collection of source data.
 
@@ -224,6 +225,7 @@ def make_galsim_object(
         Type of the source, corresponding to a GalSim class.
     inst_flux : `float`
         Instrumental flux of the source.
+    logger : `~lsst.utils.logging.LsstLogAdapter`, optional
 
     Returns
     -------
@@ -236,10 +238,13 @@ def make_galsim_object(
     object = object_class(**object_data)
     # Create a version of the object with an area-preserving shear applied.
     shear_data = get_shear_data(source_data)
-    try:
-        object = object.shear(**shear_data)
-    except TypeError:
-        pass
+    if shear_data:
+        try:
+            object = object.shear(**shear_data)
+        except TypeError as err:
+            if logger:
+                logger.warning("Cannot apply shear to GalSim object: %s", err)
+            pass
     # Apply the instrumental flux and return.
     object = object.withFlux(inst_flux)
     return object

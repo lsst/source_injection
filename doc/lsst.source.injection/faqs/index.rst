@@ -14,7 +14,7 @@ This page contains a list of frequently asked questions (and answers) about the 
 
     Full documentation for this repository can be found on the :ref:`main page <lsst.source.injection>`.
 
-.. figure:: _assets/t9813p42i_zoom_stamp_prepost_injection.gif
+.. figure:: ../_assets/t9813p42i_zoom_stamp_prepost_injection.gif
     :name: t9813p42i_zoom_stamp_prepost_injection
     :alt: An HSC i-band cutout from tract 9813, patch 42, showcasing the injection of the Rubin Observatory logo.
     :align: center
@@ -28,7 +28,7 @@ This page contains a list of frequently asked questions (and answers) about the 
     .. list-table::
         :widths: 1 1
 
-        * - .. figure:: _assets/t9813p42i_zoom_stamp_pre_injection.png
+        * - .. figure:: ../_assets/t9813p42i_zoom_stamp_pre_injection.png
                 :name: t9813p42i_zoom_stamp_pre_injection
                 :alt: Tract 9813, patch 42, HSC i-band cutout, before postage stamp injection.
                 :align: center
@@ -37,7 +37,7 @@ This page contains a list of frequently asked questions (and answers) about the 
                 ..
 
                 Before injection.
-          - .. figure:: _assets/t9813p42i_zoom_stamp_post_injection.png
+          - .. figure:: ../_assets/t9813p42i_zoom_stamp_post_injection.png
                 :name: t9813p42i_zoom_stamp_post_injection
                 :alt: Tract 9813, patch 42, HSC i-band cutout, after postage stamp injection.
                 :align: center
@@ -368,7 +368,7 @@ The example below demonstrates how to use the `SimplePipelineExecutor` to run a 
 
         user = os.getenv("USER")
 
-        # Create a Butler instance with collections appropriate for processing.
+        # Create a Butler instance with collections for processing.
         butler = SimplePipelineExecutor.prep_butler(
             REPO,
             inputs=["HSC/runs/RC2/w_2024_10/DM-43178", "injection/defaults"],
@@ -376,7 +376,11 @@ The example below demonstrates how to use the `SimplePipelineExecutor` to run a 
         )
 
         # Load the pipeline from a YAML file.
-        pipeline = Pipeline.fromFile(os.path.join("PATH", "TO", "DRP-RC2+injection.yaml#inject_coadd"))
+        pipeline = Pipeline.fromFile(
+            os.path.join(
+                "PATH", "TO", "DRP-RC2+injection.yaml#inject_coadd"
+            )
+        )
 
         # Optionally configure a task.
         pipeline.addConfigOverride(
@@ -387,12 +391,15 @@ The example below demonstrates how to use the `SimplePipelineExecutor` to run a 
 
         # Check that the config has been applied.
         inject_coadd_task = pipeline.to_graph().tasks.get("inject_coadd")
-        print(inject_coadd_task.config.process_all_data_ids)  # returns: True
+        print(inject_coadd_task.config.process_all_data_ids)  # True
 
-        # Create an executor; build a QuantumGraph from an in-memory pipeline.
+        # Create executor; build a QuantumGraph from an in-memory pipeline.
         executor = SimplePipelineExecutor.from_pipeline(
             pipeline=pipeline,
-            where="instrument='HSC' AND skymap='hsc_rings_v1' AND tract=9813 AND patch=42 AND band='i'",
+            where=(
+                "instrument='HSC' AND skymap='hsc_rings_v1' "
+                "AND tract=9813 AND patch=42 AND band='i'"
+            ),
             butler=butler,
         )
 
@@ -401,7 +408,9 @@ The example below demonstrates how to use the `SimplePipelineExecutor` to run a 
         print(f"number of quanta executed: {len(quanta)}")
 
         # Get the run outputs.
-        dataset_refs = {dtype.name:ref[0] for dtype, ref in quanta[0].outputs.items()}
+        dataset_refs = {
+            dtype.name:ref[0] for dtype, ref in quanta[0].outputs.items()
+        }
         print(f"available dataset types: {list(dataset_refs.keys())}")
         injected_deepCoadd = butler.get(dataset_refs["injected_deepCoadd"])
 

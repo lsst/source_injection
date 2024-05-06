@@ -68,6 +68,12 @@ Frequently Asked Questions
 
 A collection of :ref:`lsst.source.injection-faqs`, and answers.
 
+.. toctree::
+    :maxdepth: 1
+    :glob:
+
+    faqs/*
+
 .. _lsst.source.injection-scripts:
 
 Command Line Scripts

@@ -241,7 +241,7 @@ def make_injection_pipeline(
         match dataset_type_name:
             case "postISRCCD":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
-            case "icExp" | "calexp":
+            case "icExp" | "calexp" | "initial_pvi":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
             case "deepCoadd" | "deepCoadd_calexp" | "goodSeeingCoadd":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_coadd.yaml"

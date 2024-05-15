@@ -276,6 +276,9 @@ def make_injection_pipeline(
             pipeline.addConfigOverride(
                 injection_task_label, "connections.output_exposure", prefix + dataset_type_name
             )
+            pipeline.addConfigOverride(
+                injection_task_label, "connections.output_catalog", prefix + dataset_type_name + "_catalog"
+            )
             # Optionally update subsets to include the injection task.
             if not exclude_subsets:
                 for label in precursor_injection_task_labels:

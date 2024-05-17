@@ -173,29 +173,28 @@ def make_injection_pipeline(
     precursor_injection_task_labels = set()
     # Loop over all tasks in the pipeline.
     for task_node in pipeline.to_graph().tasks.values():
-        # Add override for Analysis Tools tasks. Connections in Analysis
-        # Tools are dynamically assigned, and so are not able to be modified in
-        # the same way as a static connection. Instead, we add a config
-        # override here to the connections.outputName field. This field is
-        # prepended to all Analysis Tools connections, and so will prepend the
-        # injection prefix to all plot/metric outputs. Further processing of
-        # this task will be skipped thereafter.
-        if issubclass(task_node.task_class, AnalysisPipelineTask):
+        # Add override for Analysis Tools task outputs (but not inputs).
+        # Connections in Analysis Tools are dynamically assigned, and so are
+        # not able to be modified in the same way as a static connection.
+        # Instead, we add an override to the connections.outputName field.
+        # This field is prepended to all Analysis Tools connections, and so
+        # will prepend the injection prefix to all plot/metric outputs.
+        if isAnalysisPipelineTask := issubclass(task_node.task_class, AnalysisPipelineTask):
             pipeline.addConfigOverride(
                 task_node.label,
                 "connections.outputName",
                 prefix + task_node.config.connections.outputName,
             )
-            continue
 
         input_types = {
-            read_edge.dataset_type_name
+            read_edge.parent_dataset_type_name
             for read_edge in itertools.chain(task_node.inputs.values(), task_node.init.inputs.values())
         }
         output_types = {
-            write_edge.dataset_type_name
+            write_edge.parent_dataset_type_name
             for write_edge in itertools.chain(task_node.outputs.values(), task_node.init.outputs.values())
         }
+
         all_connection_type_names |= input_types | output_types
         # Identify the precursor task: allows appending inject task to subset.
         if dataset_type_name in output_types:
@@ -208,11 +207,16 @@ def make_injection_pipeline(
             injected_types |= output_types
             # Add the injection prefix to all affected dataset type names.
             for edge in itertools.chain(
-                task_node.inputs.values(),
-                task_node.outputs.values(),
                 task_node.init.inputs.values(),
+                task_node.inputs.values(),
                 task_node.init.outputs.values(),
+                task_node.outputs.values(),
             ):
+                # Continue if this is an analysis task and edge is an output.
+                if isAnalysisPipelineTask and (
+                    edge in set(task_node.init.outputs.values()) | set(task_node.outputs.values())
+                ):
+                    continue
                 if hasattr(task_node.config.connections.ConnectionsClass, edge.connection_name):
                     # If the connection type is not dynamic, modify as usual.
                     if edge.parent_dataset_type_name in injected_types:

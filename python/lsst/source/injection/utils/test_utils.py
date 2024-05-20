@@ -28,6 +28,7 @@ from lsst.ip.isr.isrTask import IsrTask
 from lsst.meas.algorithms.testUtils import plantSources
 from lsst.pipe.base import Pipeline
 from lsst.pipe.base.pipelineIR import LabeledSubset
+from lsst.pipe.tasks.calibrate import CalibrateTask
 from lsst.pipe.tasks.characterizeImage import CharacterizeImageTask
 from lsst.source.injection import generate_injection_catalog
 
@@ -118,11 +119,13 @@ def make_test_injection_catalog(wcs, bbox):
 
 
 def make_test_reference_pipeline():
-    """Make a test reference pipeline containing the ISR task."""
+    """Make a test reference pipeline containing initial single-frame tasks."""
     reference_pipeline = Pipeline("reference_pipeline")
     reference_pipeline.addTask(IsrTask, "isr")
     reference_pipeline.addTask(CharacterizeImageTask, "characterizeImage")
+    reference_pipeline.addTask(CalibrateTask, "calibrate")
     reference_pipeline._pipelineIR.labeled_subsets["test_subset"] = LabeledSubset("test_subset", set(), None)
     reference_pipeline.addLabelToSubset("test_subset", "isr")
     reference_pipeline.addLabelToSubset("test_subset", "characterizeImage")
+    reference_pipeline.addLabelToSubset("test_subset", "calibrate")
     return reference_pipeline

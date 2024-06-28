@@ -388,6 +388,41 @@ def is_wcs_galsim_default(
         return not any(k in hdr for k in ["CD1_1", "CDELT1"])
 
 
+def get_gains_from_amps(exposure):
+    try:
+        amplifiers = exposure.getDetector().getAmplifiers()
+        bboxes = [amplifier.getBBox() for amplifier in amplifiers]
+        gains = [amplifier.getGain() for amplifier in amplifiers]
+    except AttributeError:
+        return None, None
+    return bboxes, gains
+
+
+def infer_gain_from_image(exposure, bad_mask_names):
+    image_arr = exposure.image.array
+    var_arr = exposure.variance.array
+    mask_arr = exposure.mask.array
+    good = np.isfinite(image_arr) & np.isfinite(var_arr)
+    if bad_mask_names is not None:
+        bad_mask_bit_mask = exposure.mask.getPlaneBitMask(bad_mask_names)
+        good &= (mask_arr.astype(int) & bad_mask_bit_mask) == 0
+    fit = np.polyfit(image_arr[good], var_arr[good], deg=1)
+    return 1.0 / fit[0]
+
+
+def get_gain_map(exposure, full_bounds, bad_mask_names):
+    gain_map = galsim.Image(full_bounds, dtype=float)
+    bboxes, gains = get_gains_from_amps(exposure)
+    if gains is None:
+        bboxes = [full_bounds]
+        gains = [infer_gain_from_image(exposure, bad_mask_names)]
+
+    for bbox, gain in zip(bboxes, gains):
+        bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
+        gain_map[bounds].array[:] = 1.0 / gain
+    return gain_map
+
+
 def inject_galsim_objects_into_exposure(
     exposure: ExposureF,
     objects: Generator[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
@@ -461,32 +496,7 @@ def inject_galsim_objects_into_exposure(
     galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
-    variance_scale = galsim_variance.copy()
-
-    # Figure out if this exposure has well-defined amplifier regions with gains
-    try:
-        amplifiers = exposure.getDetector().getAmplifiers()
-        amp_bboxes = [amplifier.getBBox() for amplifier in amplifiers]
-        gains = [amplifier.getGain() for amplifier in amplifiers]
-    except AttributeError:
-        gains = None
-
-    if gains is None:
-        # Gain info has not been stored in the exposure, so estimate it with a
-        # linear fit of image flux vs. variance in each pixel.
-        image_arr = exposure.image.array
-        var_arr = exposure.variance.array
-        mask_arr = exposure.mask.array
-        good = np.isfinite(image_arr) & np.isfinite(var_arr)
-        if bad_mask_names is not None:
-            bad_mask_bit_mask = exposure.mask.getPlaneBitMask(bad_mask_names)
-            good &= (mask_arr.astype(int) & bad_mask_bit_mask) == 0
-        fit = np.polyfit(image_arr[good], var_arr[good], deg=1)
-        variance_scale.array[:] = fit[0]
-    else:
-        for amp_bbox, gain in zip(amp_bboxes, gains):
-            amp_bounds = galsim.BoundsI(amp_bbox.minX, amp_bbox.maxX, amp_bbox.minY, amp_bbox.maxY)
-            variance_scale[amp_bounds].array[:] = 1.0 / gain
+    gain_map = get_gain_map(exposure, full_bounds, bad_mask_names)
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []
@@ -594,7 +604,7 @@ def inject_galsim_objects_into_exposure(
                 continue
 
             var_template = image_template.copy()
-            var_template *= variance_scale[object_common_bounds]
+            var_template *= gain_map[object_common_bounds]
 
             if add_noise:
                 # Treat var_template as the Poisson mean of the number of
@@ -613,18 +623,18 @@ def inject_galsim_objects_into_exposure(
 
                 rng = galsim.BaseDeviate(noise_seed)
 
-                if gains is None:
+                if np.std(gain_map.array) != 0:
                     noise = galsim.VariableGaussianNoise(rng, noise_template)
                     image_template.addNoise(noise)
                     var_template = image_template.copy()
-                    var_template *= variance_scale[object_common_bounds]
+                    var_template *= gain_map[object_common_bounds]
                 else:
                     noise = galsim.PoissonNoise(rng)
                     noise_template.addNoise(noise)
                     # Scale the photon count by the gain to get the amount of
                     # image flux to inject.
                     image_template = noise_template.copy()
-                    image_template /= variance_scale[object_common_bounds]
+                    image_template /= gain_map[object_common_bounds]
                     # Restore the original variance values
                     # of the bad-variance pixels.
                     bad_var = negative_variance | nonfinite_variance

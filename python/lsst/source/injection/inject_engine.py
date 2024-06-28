@@ -396,6 +396,7 @@ def inject_galsim_objects_into_exposure(
     draw_size_max: int = 1000,
     add_noise: bool = True,
     noise_seed: int = 0,
+    bad_mask_names: list[str] | None = None,
     logger: Any | None = None,
 ) -> tuple[list[int], list[galsim.BoundsI], list[bool], list[bool]]:
     """Inject sources into given exposure using GalSim.
@@ -425,6 +426,10 @@ def inject_galsim_objects_into_exposure(
         Seed for generating the noise of the first injected object. The seed
         actually used increases by 1 for each subsequent object, to ensure
         independent noise realizations.
+    bad_mask_names : `list[str]`, optional
+        List of mask plane names indicating pixels to ignore when fitting flux
+        vs variance in preparation for variance plane modification. If None,
+        then the all pixels are used.
     logger : `lsst.utils.logging.LsstLogAdapter`, optional
         Logger to use for logging messages.
 
@@ -473,11 +478,9 @@ def inject_galsim_objects_into_exposure(
         var_arr = exposure.variance.array
         mask_arr = exposure.mask.array
         good = np.isfinite(image_arr) & np.isfinite(var_arr)
-        bad_mask_names = ["BAD", "CR", "CROSSTALK", "INTRP", "NO_DATA", "SAT", "SUSPECT", "UNMASKEDNAN"]
-        maskPlaneDict = exposure.mask.getMaskPlaneDict()
-        for mask_name in bad_mask_names:
-            if mask_name in maskPlaneDict:
-                good &= (mask_arr & (1 << maskPlaneDict[mask_name])) == 0
+        if bad_mask_names is not None:
+            bad_mask_bit_mask = exposure.mask.getPlaneBitMask(bad_mask_names)
+            good &= (mask_arr.astype(int) & bad_mask_bit_mask) == 0
         fit = np.polyfit(image_arr[good], var_arr[good], deg=1)
         variance_scale.array[:] = fit[0]
     else:

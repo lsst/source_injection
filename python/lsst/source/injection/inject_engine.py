@@ -388,12 +388,50 @@ def is_wcs_galsim_default(
         return not any(k in hdr for k in ["CD1_1", "CDELT1"])
 
 
+def get_gains_from_amps(exposure):
+    try:
+        amplifiers = exposure.getDetector().getAmplifiers()
+        bboxes = [amplifier.getBBox() for amplifier in amplifiers]
+        gains = [amplifier.getGain() for amplifier in amplifiers]
+    except AttributeError:
+        return None, None
+    return bboxes, gains
+
+
+def infer_gain_from_image(exposure, bad_mask_names):
+    image_arr = exposure.image.array
+    var_arr = exposure.variance.array
+    mask_arr = exposure.mask.array
+    good = np.isfinite(image_arr) & np.isfinite(var_arr)
+    if bad_mask_names is not None:
+        bad_mask_bit_mask = exposure.mask.getPlaneBitMask(bad_mask_names)
+        good &= (mask_arr.astype(int) & bad_mask_bit_mask) == 0
+    fit = np.polyfit(image_arr[good], var_arr[good], deg=1)
+    return 1.0 / fit[0]
+
+
+def get_gain_map(exposure, full_bounds, bad_mask_names):
+    gain_map = galsim.Image(full_bounds, dtype=float)
+    bboxes, gains = get_gains_from_amps(exposure)
+    if gains is None:
+        bboxes = [full_bounds]
+        gains = [infer_gain_from_image(exposure, bad_mask_names)]
+
+    for bbox, gain in zip(bboxes, gains):
+        bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
+        gain_map[bounds].array[:] = 1.0 / gain
+    return gain_map
+
+
 def inject_galsim_objects_into_exposure(
     exposure: ExposureF,
     objects: Generator[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
     mask_plane_name: str = "INJECTED",
     calib_flux_radius: float = 12.0,
     draw_size_max: int = 1000,
+    add_noise: bool = True,
+    noise_seed: int = 0,
+    bad_mask_names: list[str] | None = None,
     logger: Any | None = None,
 ) -> tuple[list[int], list[galsim.BoundsI], list[bool], list[bool]]:
     """Inject sources into given exposure using GalSim.
@@ -416,6 +454,17 @@ def inject_galsim_objects_into_exposure(
     draw_size_max : `int`
         Maximum allowed size of the drawn object. If the object is larger than
         this, the draw size will be clipped to this size.
+    add_noise : `bool`
+        Whether to randomly vary the amount of injected image flux in each
+        pixel by an amount consistent with the amount of injected variance.
+    noise_seed : `int`
+        Seed for generating the noise of the first injected object. The seed
+        actually used increases by 1 for each subsequent object, to ensure
+        independent noise realizations.
+    bad_mask_names : `list[str]`, optional
+        List of mask plane names indicating pixels to ignore when fitting flux
+        vs variance in preparation for variance plane modification. If None,
+        then the all pixels are used.
     logger : `lsst.utils.logging.LsstLogAdapter`, optional
         Logger to use for logging messages.
 
@@ -444,7 +493,10 @@ def inject_galsim_objects_into_exposure(
     bbox = exposure.getBBox()
     full_bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
     galsim_image = galsim.Image(exposure.image.array, bounds=full_bounds)
+    galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
+
+    gain_map = get_gain_map(exposure, full_bounds, bad_mask_names)
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []
@@ -530,13 +582,16 @@ def inject_galsim_objects_into_exposure(
         # Inject the source if there is any overlap.
         if object_common_bounds.area() > 0:
             common_image = galsim_image[object_common_bounds]
+            common_variance = galsim_variance[object_common_bounds]
+
             offset = posd - object_common_bounds.true_center
             # Note, for calexp injection, pixel is already part of the PSF and
             # for coadd injection, it's incorrect to include the output pixel.
             # So for both cases, we draw using method='no_pixel'.
+            image_template = common_image.copy()
             try:
-                conv.drawImage(
-                    common_image, add_to_image=True, offset=offset, wcs=galsim_wcs, method="no_pixel"
+                image_template = conv.drawImage(
+                    image_template, add_to_image=False, offset=offset, wcs=galsim_wcs, method="no_pixel"
                 )
             except GalSimFFTSizeError as err:
                 fft_size_errors[i] = True
@@ -547,6 +602,52 @@ def inject_galsim_objects_into_exposure(
                         err,
                     )
                 continue
+
+            var_template = image_template.copy()
+            var_template *= gain_map[object_common_bounds]
+
+            if add_noise:
+                # Treat var_template as the Poisson mean of the number of
+                # photons collected by each pixel.
+                noise_template = var_template.copy()
+                negative_variance = var_template.array < 0
+                nonfinite_variance = ~np.isfinite(var_template.array)
+                if np.any(negative_variance):
+                    if logger:
+                        logger.debug("Setting negative-variance pixels to 0 variance for noise generation.")
+                    noise_template.array[negative_variance] = 0
+                if np.any(nonfinite_variance):
+                    if logger:
+                        logger.debug("Setting non-finite-variance pixels to 0 variance for noise generation.")
+                    noise_template.array[nonfinite_variance] = 0
+
+                rng = galsim.BaseDeviate(noise_seed)
+
+                if np.std(gain_map.array) != 0:
+                    noise = galsim.VariableGaussianNoise(rng, noise_template)
+                    image_template.addNoise(noise)
+                    var_template = image_template.copy()
+                    var_template *= gain_map[object_common_bounds]
+                else:
+                    noise = galsim.PoissonNoise(rng)
+                    noise_template.addNoise(noise)
+                    # Scale the photon count by the gain to get the amount of
+                    # image flux to inject.
+                    image_template = noise_template.copy()
+                    image_template /= gain_map[object_common_bounds]
+                    # Restore the original variance values
+                    # of the bad-variance pixels.
+                    bad_var = negative_variance | nonfinite_variance
+                    noise_template.array[bad_var] = var_template.array[bad_var]
+                    var_template = noise_template
+
+            common_image += image_template
+            common_variance += var_template
+
+            # Increment the seed so different noise is generated for different
+            # objects.
+            noise_seed += 1
+
             common_box = Box2I(
                 Point2I(object_common_bounds.xmin, object_common_bounds.ymin),
                 Point2I(object_common_bounds.xmax, object_common_bounds.ymax),

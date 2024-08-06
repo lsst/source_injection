@@ -412,15 +412,61 @@ def infer_gain_from_image(exposure, bad_mask_names):
 
 def get_gain_map(exposure, full_bounds, bad_mask_names):
     gain_map = galsim.Image(full_bounds, dtype=float)
+    is_calexp = True
+
     bboxes, gains = get_gains_from_amps(exposure)
     if gains is None:
+        # Separate amplifier gains not found.
+        # This is not a calexp.
+        is_calexp = False
         bboxes = [full_bounds]
         gains = [infer_gain_from_image(exposure, bad_mask_names)]
 
     for bbox, gain in zip(bboxes, gains):
-        bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
+        bounds = galsim.BoundsI(bbox.getXMin(), bbox.getXMax(), bbox.getYMin(), bbox.getYMax())
         gain_map[bounds].array[:] = 1.0 / gain
-    return gain_map
+    return gain_map, is_calexp
+
+
+def add_noise_to_galsim_image(
+    image_template, var_template, is_calexp, gain_map, object_common_bounds, noise_seed=None, logger=None
+):
+    noise_template = var_template.copy()
+    negative_variance = var_template.array < 0
+    nonfinite_variance = ~np.isfinite(var_template.array)
+    if np.any(negative_variance):
+        if logger:
+            logger.debug("Setting negative-variance pixels to 0 variance for noise generation.")
+        noise_template.array[negative_variance] = 0
+    if np.any(nonfinite_variance):
+        if logger:
+            logger.debug("Setting non-finite-variance pixels to 0 variance for noise generation.")
+        noise_template.array[nonfinite_variance] = 0
+
+    rng = galsim.BaseDeviate(noise_seed)
+
+    if is_calexp:
+        # Treat noise_template, which is the expected amount of
+        # injected flux divided by the gain, as the Poisson mean of
+        # the number of photons collected by each pixel.
+        noise = galsim.PoissonNoise(rng)
+        noise_template.addNoise(noise)
+        # Scale the photon count by the gain to get the amount of
+        # image flux to inject.
+        image_template = noise_template.copy()
+        image_template /= gain_map[object_common_bounds]
+        # Restore the original variance values
+        # of the bad-variance pixels.
+        bad_var = negative_variance | nonfinite_variance
+        noise_template.array[bad_var] = var_template.array[bad_var]
+        var_template = noise_template
+    else:
+        noise = galsim.VariableGaussianNoise(rng, noise_template)
+        image_template.addNoise(noise)
+        var_template = image_template.copy()
+        var_template *= gain_map[object_common_bounds]
+
+    return image_template, var_template
 
 
 def inject_galsim_objects_into_exposure(
@@ -429,6 +475,7 @@ def inject_galsim_objects_into_exposure(
     mask_plane_name: str = "INJECTED",
     calib_flux_radius: float = 12.0,
     draw_size_max: int = 1000,
+    inject_variance: bool = True,
     add_noise: bool = True,
     noise_seed: int = 0,
     bad_mask_names: list[str] | None = None,
@@ -454,6 +501,9 @@ def inject_galsim_objects_into_exposure(
     draw_size_max : `int`
         Maximum allowed size of the drawn object. If the object is larger than
         this, the draw size will be clipped to this size.
+    inject_variance : `bool`
+        Whether, when injecting flux into the image plane, to inject a
+        corresponding amount of variance into the variance plane.
     add_noise : `bool`
         Whether to randomly vary the amount of injected image flux in each
         pixel by an amount consistent with the amount of injected variance.
@@ -496,7 +546,7 @@ def inject_galsim_objects_into_exposure(
     galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
-    gain_map = get_gain_map(exposure, full_bounds, bad_mask_names)
+    gain_map, is_calexp = get_gain_map(exposure, full_bounds, bad_mask_names)
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []
@@ -603,46 +653,25 @@ def inject_galsim_objects_into_exposure(
                     )
                 continue
 
+            # The amount of additional variance to inject,
+            # if inject_variance is true.
             var_template = image_template.copy()
             var_template *= gain_map[object_common_bounds]
 
             if add_noise:
-                # Treat var_template as the Poisson mean of the number of
-                # photons collected by each pixel.
-                noise_template = var_template.copy()
-                negative_variance = var_template.array < 0
-                nonfinite_variance = ~np.isfinite(var_template.array)
-                if np.any(negative_variance):
-                    if logger:
-                        logger.debug("Setting negative-variance pixels to 0 variance for noise generation.")
-                    noise_template.array[negative_variance] = 0
-                if np.any(nonfinite_variance):
-                    if logger:
-                        logger.debug("Setting non-finite-variance pixels to 0 variance for noise generation.")
-                    noise_template.array[nonfinite_variance] = 0
-
-                rng = galsim.BaseDeviate(noise_seed)
-
-                if np.std(gain_map.array) != 0:
-                    noise = galsim.VariableGaussianNoise(rng, noise_template)
-                    image_template.addNoise(noise)
-                    var_template = image_template.copy()
-                    var_template *= gain_map[object_common_bounds]
-                else:
-                    noise = galsim.PoissonNoise(rng)
-                    noise_template.addNoise(noise)
-                    # Scale the photon count by the gain to get the amount of
-                    # image flux to inject.
-                    image_template = noise_template.copy()
-                    image_template /= gain_map[object_common_bounds]
-                    # Restore the original variance values
-                    # of the bad-variance pixels.
-                    bad_var = negative_variance | nonfinite_variance
-                    noise_template.array[bad_var] = var_template.array[bad_var]
-                    var_template = noise_template
+                image_template, var_template = add_noise_to_galsim_image(
+                    image_template,
+                    var_template,
+                    is_calexp,
+                    gain_map,
+                    object_common_bounds,
+                    noise_seed,
+                    logger,
+                )
 
             common_image += image_template
-            common_variance += var_template
+            if inject_variance:
+                common_variance += var_template
 
             # Increment the seed so different noise is generated for different
             # objects.

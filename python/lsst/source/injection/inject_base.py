@@ -117,6 +117,11 @@ class BaseInjectConfig(PipelineTaskConfig, pipelineConnections=BaseInjectConnect
         doc="String to prefix to the entries in the *col_stamp* column, for example, a directory path.",
         default="",
     )
+    inject_variance = Field[bool](
+        doc="Whether, when injecting flux into the image plane, to inject a corresponding amount of variance "
+        "into the variance plane.",
+        default=True,
+    )
     add_noise = Field[bool](
         doc="Whether to randomly vary the injected flux in each pixel by an amount consistent with "
         "the injected variance.",
@@ -282,6 +287,7 @@ class BaseInjectTask(PipelineTask):
                 mask_plane_name=self.config.mask_plane_name,
                 calib_flux_radius=self.config.calib_flux_radius,
                 draw_size_max=10000,  # TODO: replace draw_size logic with GS logic.
+                inject_variance=self.config.inject_variance,
                 add_noise=self.config.add_noise,
                 noise_seed=self.config.noise_seed,
                 bad_mask_names=self.config.bad_mask_names,

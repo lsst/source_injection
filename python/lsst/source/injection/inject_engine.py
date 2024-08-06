@@ -423,7 +423,10 @@ def get_gain_map(exposure, full_bounds, bad_mask_names):
         gains = [infer_gain_from_image(exposure, bad_mask_names)]
 
     for bbox, gain in zip(bboxes, gains):
-        bounds = galsim.BoundsI(bbox.getXMin(), bbox.getXMax(), bbox.getYMin(), bbox.getYMax())
+        if is_calexp:
+            bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
+        else:
+            bounds = galsim.BoundsI(bbox.getXMin(), bbox.getXMax(), bbox.getYMin(), bbox.getYMax())
         gain_map[bounds].array[:] = 1.0 / gain
     return gain_map, is_calexp
 

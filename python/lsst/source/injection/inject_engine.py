@@ -482,6 +482,7 @@ def get_gain_map(
         bboxes = [full_bounds]
         gains = [infer_gain_from_image(exposure, bad_mask_names)]
 
+    assert gains is not None  # Make mypy happy.
     for bbox, gain in zip(bboxes, gains):
         if is_single_CCD:
             bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)

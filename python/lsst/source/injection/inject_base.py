@@ -32,7 +32,7 @@ from astropy import units
 from astropy.table import Table, hstack, vstack
 from astropy.units import Quantity, UnitConversionError
 from lsst.afw.image.exposure.exposureUtils import bbox_contains_sky_coords
-from lsst.pex.config import ChoiceField, Field
+from lsst.pex.config import ChoiceField, Field, ListField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connectionTypes import PrerequisiteInput
 
@@ -116,6 +116,26 @@ class BaseInjectConfig(PipelineTaskConfig, pipelineConnections=BaseInjectConnect
     stamp_prefix = Field[str](
         doc="String to prefix to the entries in the *col_stamp* column, for example, a directory path.",
         default="",
+    )
+    inject_variance = Field[bool](
+        doc="Whether, when injecting flux into the image plane, to inject a corresponding amount of variance "
+        "into the variance plane.",
+        default=True,
+    )
+    add_noise = Field[bool](
+        doc="Whether to randomly vary the injected flux in each pixel by an amount consistent with "
+        "the injected variance.",
+        default=True,
+    )
+    noise_seed = Field[int](
+        doc="Initial seed for random noise generation. This value increments by 1 for each injected "
+        "object, so each object has an independent noise realization.",
+        default=0,
+    )
+    bad_mask_names = ListField[str](
+        doc="List of mask plane names indicating pixels to ignore when fitting flux vs variance in "
+        "preparation for variance plane modification.",
+        default=["BAD", "CR", "CROSSTALK", "INTRP", "NO_DATA", "SAT", "SUSPECT", "UNMASKEDNAN"],
     )
 
     # Custom column names.
@@ -267,6 +287,10 @@ class BaseInjectTask(PipelineTask):
                 mask_plane_name=self.config.mask_plane_name,
                 calib_flux_radius=self.config.calib_flux_radius,
                 draw_size_max=10000,  # TODO: replace draw_size logic with GS logic.
+                inject_variance=self.config.inject_variance,
+                add_noise=self.config.add_noise,
+                noise_seed=self.config.noise_seed,
+                bad_mask_names=self.config.bad_mask_names,
                 logger=self.log,
             )
             # Add inject_galsim_objects_into_exposure outputs into output cat.

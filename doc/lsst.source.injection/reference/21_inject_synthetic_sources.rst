@@ -78,6 +78,15 @@ The step 1 subset will have had the ``inject_exposure`` task (:lsst-task:`~lsst.
     These only run tasks including and after the injection task.
     The ``injected_stepN`` subsets can save memory and runtime if the tasks prior to injection have already been run.
 
+The image plane of the ``injected_postISRCCD`` will be modified from the original by the addition of a light profile for every injected object.
+By default the injected light profiles have simulated shot noise added. This can be turned off by setting ``add_noise`` to ``False`` in the injection task config.
+The variance plane gains additional estimated variance consistent with the amount of light added to the image plane, including any simulated noise.
+
+.. caution::
+
+    Setting ``inject_variance`` to ``False`` in the injection task config will prevent any changes to the variance plane.
+    This is likely to bias any downstream measurements and should normally never be done, unless such bias is the object of study.
+
 Assuming processing completes successfully, the ``injected_postISRCCD`` and associated ``injected_postISRCCD_catalog`` will be written to the butler repository.
 Various downstream ``step1`` data products should also exist, including the ``injected_calexp`` dataset type (see example images below).
 

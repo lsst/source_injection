@@ -95,6 +95,7 @@ class InjectEngineTestCase(TestCase):
             mask_plane_name="INJECTED",
             calib_flux_radius=12.0,
             draw_size_max=1000,
+            add_noise=False,
         )
         pc = self.exposure.getPhotoCalib()
         inst_fluxes = [float(pc.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]]

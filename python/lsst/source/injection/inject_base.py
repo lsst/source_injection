@@ -491,6 +491,11 @@ class BaseInjectTask(PipelineTask):
         """
         self.config = cast(BaseInjectConfig, self.config)
 
+        # Exit early if there are no sources to inject.
+        if len(injection_catalog) == 0:
+            self.log.info("Catalog cleaning not applied to empty injection catalog.")
+            return injection_catalog
+
         sources_to_keep = np.ones(len(injection_catalog), dtype=bool)
 
         # Determine centroids and remove sources outside the padded bbox.
@@ -586,6 +591,11 @@ class BaseInjectTask(PipelineTask):
             The cleaned catalog of sources to be injected.
         """
         self.config = cast(BaseInjectConfig, self.config)
+
+        # Exit early if there are no sources to inject.
+        if len(injection_catalog) == 0:
+            self.log.info("Catalog checking not applied to empty injection catalog.")
+            return injection_catalog
 
         # Flag erroneous magnitude values (missing mag data or NaN mag values).
         if "mag" not in injection_catalog.columns:

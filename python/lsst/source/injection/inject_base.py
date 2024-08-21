@@ -244,7 +244,7 @@ class BaseInjectTask(PipelineTask):
         injection_catalog = self._standardize_columns(
             injection_catalog,
             column_mapping,
-            input_exposure.getWcs().getPixelScale().asArcseconds(),
+            input_exposure.getWcs().getPixelScale(input_exposure.getBBox().getCenter()).asArcseconds(),
         )
 
         # Clean the injection catalog of sources which are not injectable.

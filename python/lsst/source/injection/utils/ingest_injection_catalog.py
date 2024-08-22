@@ -27,7 +27,7 @@ import logging
 
 import esutil
 from astropy.table import Table, vstack
-from lsst.daf.butler import Butler, CollectionType, DatasetRef, DatasetType, DimensionUniverse
+from lsst.daf.butler import Butler, CollectionType, DatasetRef, DatasetType
 
 
 def ingest_injection_catalog(
@@ -81,7 +81,7 @@ def ingest_injection_catalog(
         dataset_type_name,
         ("htm7", "band"),
         "ArrowAstropy",
-        universe=DimensionUniverse(),
+        universe=writeable_butler.dimensions,
     )
     writeable_butler.registry.registerDatasetType(table_dataset_type)
     writeable_butler.registry.registerCollection(

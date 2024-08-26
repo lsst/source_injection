@@ -127,16 +127,24 @@ def main():
     writeable_butler = Butler(args.butler_config, writeable=True)
     injection_catalog_format = vars(args).get("format", None)
 
-    for injection_catalog, band in injection_catalogs:
-        # The character_as_bytes=False option is preferred, if possible.
-        try:
-            table = Table.read(injection_catalog, format=injection_catalog_format, character_as_bytes=False)
-        except TypeError:
-            table = Table.read(injection_catalog, format=injection_catalog_format)
+    injection_catalogs_table = Table(rows=injection_catalogs, names=("injection_catalog", "band"))
+    injection_catalogs_groups = injection_catalogs_table.group_by("band")
+
+    for injection_catalogs_group in injection_catalogs_groups.groups:
+        band = injection_catalogs_group["band"][0]
+
+        injection_catalogs_band = []
+        for injection_catalog in injection_catalogs_group["injection_catalog"]:
+            # The character_as_bytes=False option is preferred, if possible.
+            try:
+                tbl = Table.read(injection_catalog, format=injection_catalog_format, character_as_bytes=False)
+            except TypeError:
+                tbl = Table.read(injection_catalog, format=injection_catalog_format)
+            injection_catalogs_band.append(tbl)
 
         _ = ingest_injection_catalog(
             writeable_butler=writeable_butler,
-            table=table,
+            table=injection_catalogs_band,
             band=band,
             **{
                 k: v

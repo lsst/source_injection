@@ -2,7 +2,7 @@ description: Match tract-level injected_deepCoadd_catalog datasets to injected_o
 tasks:
   consolidate_injected_catalogs:
     class: lsst.source.injection.utils.ConsolidateInjectedCatalogsTask
-  match_object_to_truth:
+  match_object_to_injected:
     class: lsst.pipe.tasks.match_tract_catalog.MatchTractCatalogTask
     config:
       connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
@@ -23,7 +23,7 @@ tasks:
         from lsst.pipe.tasks.match_tract_catalog_probabilistic import MatchTractCatalogProbabilisticTask
 
         config.match_tract_catalog.retarget(MatchTractCatalogProbabilisticTask)
-  compare_object_to_truth:
+  compare_object_to_injected:
     class: lsst.pipe.tasks.diff_matched_tract_catalog.DiffMatchedTractCatalogTask
     config:
       connections.name_input_cat_ref: injected_deepCoadd_catalog_tract

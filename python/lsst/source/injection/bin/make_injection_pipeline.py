@@ -26,7 +26,7 @@ import os
 import time
 from argparse import SUPPRESS, ArgumentParser
 
-from ..utils.make_injection_pipeline import make_injection_pipeline
+from ..utils import make_injection_pipeline
 from .source_injection_help_formatter import SourceInjectionHelpFormatter
 
 

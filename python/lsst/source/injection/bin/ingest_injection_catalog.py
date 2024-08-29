@@ -28,7 +28,7 @@ from argparse import SUPPRESS, ArgumentParser
 from astropy.table import Table
 from lsst.daf.butler import Butler
 
-from ..utils.ingest_injection_catalog import ingest_injection_catalog
+from ..utils import ingest_injection_catalog
 from .source_injection_help_formatter import SourceInjectionHelpFormatter
 
 

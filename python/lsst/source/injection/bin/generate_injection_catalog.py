@@ -27,8 +27,7 @@ from argparse import SUPPRESS, ArgumentParser
 
 from lsst.daf.butler import Butler
 
-from ..utils.generate_injection_catalog import generate_injection_catalog
-from ..utils.ingest_injection_catalog import ingest_injection_catalog
+from ..utils import generate_injection_catalog, ingest_injection_catalog
 from .source_injection_help_formatter import SourceInjectionHelpFormatter
 
 

@@ -410,9 +410,12 @@ def _make_multiband_catalog(
             multiband_catalog = vstack([multiband_catalog, catalog_next_band])
     # Fill any automatically masked values with NaNs.
     if multiband_catalog.has_masked_columns:
-        for col in multiband_catalog.columns:
-            if isinstance(multiband_catalog[col], MaskedColumn):
-                multiband_catalog[col] = multiband_catalog[col].filled(np.nan)
+        for colname in multiband_catalog.columns:
+            column = multiband_catalog[colname]
+            if isinstance(column, MaskedColumn):
+                dtype = column.dtype
+                # Fill with nan if possible, otherwise the dtype's minimum
+                column.fill(np.nan if np.issubdtype(dtype, float) else np.ma.maximum_fill_value(column))
     return multiband_catalog
 
 

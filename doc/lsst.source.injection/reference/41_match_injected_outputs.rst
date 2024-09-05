@@ -50,7 +50,7 @@ Now that we have our consolidated tract-level injected catalog and a reference t
 
 The matching tasks are ``MatchTractCatalogTask`` and ``DiffMatchedTractCatalogTask``.
 The first task performs a spatial probablistic match with minimal flag cuts, and the second computes any relevant statistics.
-These tasks are located in the ``pipelines/match_injected_tract_catalog.yaml`` pipeline definition file, with the labels ``match_object_to_truth`` and ``compare_object_to_truth``.
+These tasks are located in the ``pipelines/match_injected_tract_catalog.yaml`` pipeline definition file, with the labels ``match_object_to_injected`` and ``compare_object_to_injected``.
 The pipeline graph for the consolidation and matching process is shown below:
 
 .. code::
@@ -65,11 +65,11 @@ The pipeline graph for the consolidation and matching process is shown below:
       │ │
     ○ │ │  injected_objectTable_tract
   ╭─┼─┼─┤
-  ■ │ │ │  match_object_to_truth
+  ■ │ │ │  match_object_to_injected
   │ │ │ │
   ◍ │ │ │  match_target_injected_deepCoadd_catalog_tract_injected_objectTable_tract, match_ref_injected_deepCoadd_catalog_tract_injected_objectTable_tract
   ╰─┴─┴─┤
-        ■  compare_object_to_truth
+        ■  compare_object_to_injected
         │
         ○  matched_injected_deepCoadd_catalog_tract_injected_objectTable_tract
 

@@ -1,8 +1,8 @@
 description: Match tract-level injected_deepCoadd_catalog datasets to injected_objectTable_tract datasets.
 tasks:
   consolidate_injected_catalogs:
-    class: lsst.source.injection.utils.consolidate_injected_deepCoadd_catalogs.ConsolidateInjectedCatalogsTask
-  match_object_to_truth:
+    class: lsst.source.injection.utils.ConsolidateInjectedCatalogsTask
+  match_object_to_injected:
     class: lsst.pipe.tasks.match_tract_catalog.MatchTractCatalogTask
     config:
       connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
@@ -11,7 +11,7 @@ tasks:
       match_tract_catalog.columns_ref_meas: ["ra", "dec"]
       match_tract_catalog.columns_target_meas: ["coord_ra", "coord_dec"]
       match_tract_catalog.columns_target_err: ["coord_raErr", "coord_decErr"]
-      match_tract_catalog.columns_ref_copy: ["injected_id", "source_type"]
+      match_tract_catalog.columns_ref_copy: ["injected_id"]
       match_tract_catalog.columns_target_copy: ["objectId"]
       match_tract_catalog.columns_ref_select_true: ["injected_isPatchInner"]
       match_tract_catalog.columns_ref_select_false: ["injection_flag"]
@@ -23,7 +23,7 @@ tasks:
         from lsst.pipe.tasks.match_tract_catalog_probabilistic import MatchTractCatalogProbabilisticTask
 
         config.match_tract_catalog.retarget(MatchTractCatalogProbabilisticTask)
-  compare_object_to_truth:
+  compare_object_to_injected:
     class: lsst.pipe.tasks.diff_matched_tract_catalog.DiffMatchedTractCatalogTask
     config:
       connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
@@ -35,7 +35,7 @@ tasks:
         g_mag: "g_flux", r_mag: "r_flux", i_mag: "i_flux", z_mag: "z_flux", y_mag: "y_flux",
       }
       columns_ref_copy: [
-        "injected_id",
+        "injected_id", "source_type",
         "g_mag", "r_mag", "i_mag", "z_mag", "y_mag",
         "injection_flag", "injected_isPatchInner",
       ]
@@ -45,6 +45,6 @@ tasks:
         "g_psfFluxErr", "r_psfFluxErr", "i_psfFluxErr", "z_psfFluxErr", "y_psfFluxErr",
         "g_psfFlux_flag", "r_psfFlux_flag", "i_psfFlux_flag", "z_psfFlux_flag", "y_psfFlux_flag",
         "patch", "detect_isDeblendedSource", "detect_isPatchInner", "detect_isPrimary", "merge_peak_sky",
-        "refSizeExtendedness",
+        "refExtendedness", "refSizeExtendedness",
       ]
       include_unmatched: true

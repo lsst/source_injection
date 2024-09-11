@@ -408,14 +408,16 @@ def _make_multiband_catalog(
         # Otherwise just stack the tables.
         else:
             multiband_catalog = vstack([multiband_catalog, catalog_next_band])
-    # Fill any automatically masked values with NaNs.
+    # Fill any automatically masked values with NaNs if possible (float)
+    # Otherwise, use the dtype's minimum value (for int, bool, etc.)
     if multiband_catalog.has_masked_columns:
         for colname in multiband_catalog.columns:
             column = multiband_catalog[colname]
             if isinstance(column, MaskedColumn):
-                dtype = column.dtype
-                # Fill with nan if possible, otherwise the dtype's minimum
-                column.fill(np.nan if np.issubdtype(dtype, float) else np.ma.maximum_fill_value(column))
+                # Set the underlying values in-place
+                column._data[column.mask] = (
+                    np.nan if np.issubdtype(column.dtype, float) else np.ma.maximum_fill_value(column)
+                )
     return multiband_catalog
 
 

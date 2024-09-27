@@ -290,6 +290,8 @@ def make_galsim_trail(
     linear_wcs = wcs.linearizePixelToSky(sky_coords, arcseconds)
     mat = linear_wcs.getMatrix()
     object = object.transform(mat[0, 0], mat[0, 1], mat[1, 0], mat[1, 1])
+    # Rescale flux; transformation preserves surface brightness, not flux.
+    object *= 1.0 / np.abs(mat[0, 0] * mat[1, 1] - mat[0, 1] * mat[1, 0])
     return object  # type: ignore
 
 

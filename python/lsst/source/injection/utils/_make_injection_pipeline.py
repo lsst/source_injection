@@ -166,6 +166,21 @@ def make_injection_pipeline(
             ", ".join(sorted(not_found_tasks)),
         )
 
+    # Check for any empty subsets and remove them.
+    removed_subsets = set()
+    for subset_label, subset_tasks in pipeline.subsets.items():
+        if not subset_tasks:
+            removed_subsets.add(subset_label)
+            pipeline.removeLabeledSubset(subset_label)
+    if (removed_subsets_count := len(removed_subsets)) > 0:
+        grammar = "subset" if removed_subsets_count == 1 else "subsets"
+        logger.warning(
+            "Removed %d empty %s from the pipeline: %s.",
+            removed_subsets_count,
+            grammar,
+            ", ".join(sorted(removed_subsets)),
+        )
+
     # Determine the set of dataset type names affected by source injection.
     injected_tasks = set()
     all_connection_type_names = set()

@@ -236,16 +236,19 @@ def make_galsim_object(
     object_class = getattr(galsim, source_type)
     object_data = get_object_data(source_data, object_class)
     object = object_class(**object_data)
-    # Create a version of the object with an area-preserving shear applied.
-    shear_data = get_shear_data(source_data)
-    if shear_data:
-        try:
-            object = object.shear(**shear_data)
-        except TypeError as err:
-            if logger:
-                logger.warning("Cannot apply shear to GalSim object: %s", err)
-            pass
-    # Apply the instrumental flux and return.
+    # Don't shear delta functions. It will work if the parameters are finite
+    # but is unnecessary and unhelpful.
+    if not isinstance(object, galsim.DeltaFunction):
+        # Create a version of the object with an area-preserving shear applied.
+        shear_data = get_shear_data(source_data)
+        if shear_data:
+            try:
+                object = object.shear(**shear_data)
+            except TypeError as err:
+                if logger:
+                    logger.warning("Cannot apply shear to GalSim object: %s", err)
+                pass
+        # Apply the instrumental flux and return.
     object = object.withFlux(inst_flux)
     return object
 

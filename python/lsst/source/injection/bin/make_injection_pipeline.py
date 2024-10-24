@@ -121,6 +121,31 @@ with the 'injected_' prefix prepended.
         action="append",
     )
     parser.add_argument(
+        "-a",
+        "--additional-pipelines",
+        type=str,
+        help="Location(s) of additional input pipeline definition YAML file(s)."
+        "Tasks from these additional pipelines will be added to the output injection pipeline.",
+        metavar="FILE",
+        nargs="+",
+    )
+    parser.add_argument(
+        "-s",
+        "--subset-name",
+        type=str,
+        help="All tasks from any additional pipelines will be added to this subset."
+        "The subset will be created if it does not already exist.",
+        metavar="FILE",
+    )
+    parser.add_argument(
+        "-d",
+        "--subset-description",
+        type=str,
+        help="The description given to a new subset which holds tasks from additional pipelines provided."
+        "Note: this argument is ignored if the subset already exists.",
+        metavar="FILE",
+    )
+    parser.add_argument(
         "-h",
         "--help",
         action="help",

@@ -84,6 +84,9 @@ def make_injection_pipeline(
     prefix: str = "injected_",
     instrument: str | None = None,
     config: str | list[str] | None = None,
+    input_pipelines: list[Pipeline] | list[str] | None = None,
+    subset_name: str | None = None,
+    new_subset_description: str = "",
     log_level: int = logging.INFO,
 ) -> Pipeline:
     """Make an expanded source injection pipeline.
@@ -122,6 +125,14 @@ def make_injection_pipeline(
         Add instrument overrides. Must be a fully qualified class name.
     config : `str` | `list` [`str`], optional
         Config override for a task, in the format 'label:key=value'.
+    input_pipelines: `list`[Pipeline] | `list`[`str`]
+        Location(s) of input pipeline definition YAML file(s). Tasks from
+        input_pipelines will be added to reference_pipeline.
+    subset_name: `str`, optional
+        All tasks from input_pipelines will be added to this subset. If the
+        subset does not exist it will be created.
+    new_subset_description: `str`, optional
+        The description for the new subset.
     log_level : `int`, optional
         The log level to use for logging.
 
@@ -329,4 +340,35 @@ def make_injection_pipeline(
         len(injected_subset_labels),
         grammar2,
     )
+
+    # Optionally incluce additional tasks in the injection pipeline.
+    if input_pipelines:
+        input_tasks: set[str] = set()
+        # Record all input task labels and merge all input pipelines into the
+        # injection pipeline.
+        for input_pipeline in input_pipelines:
+            if isinstance(input_pipeline, str):
+                input_pipeline = Pipeline.fromFile(input_pipeline)
+            input_tasks.update(input_pipeline.task_labels)
+            pipeline.mergePipeline(input_pipeline)
+
+        # Add all tasks to subset_name. If the subset does not exist create it.
+        if isinstance(subset_name, str):
+            if subset_name in pipeline.subsets.keys():
+                for input_task in input_tasks:
+                    pipeline.addLabelToSubset(subset_name, input_task)
+                    subset_grammar = f"the existing subset {subset_name}"
+            else:
+                pipeline.addLabeledSubset(subset_name, new_subset_description, input_tasks)
+                subset_grammar = f"a new subset {subset_name}"
+
+        # Logging info.
+        task_grammar = "task" if len(input_tasks) == 1 else "tasks"
+        logger.info(
+            "Added %d %s to %s",
+            len(input_tasks),
+            task_grammar,
+            subset_grammar,
+        )
+
     return pipeline

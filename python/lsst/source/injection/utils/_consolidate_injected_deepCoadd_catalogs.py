@@ -35,7 +35,7 @@ from lsst.geom import Box2D, SpherePoint, degrees
 from lsst.pex.config import Field
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connections import InputQuantizedConnection
-from lsst.pipe.base.connectionTypes import Input, Output, PrerequisiteInput
+from lsst.pipe.base.connectionTypes import Input, Output
 from lsst.skymap import BaseSkyMap
 from smatch.matcher import Matcher  # type: ignore [import-not-found]
 
@@ -49,7 +49,7 @@ class ConsolidateInjectedCatalogsConnections(
 ):
     """Base connections for source injection tasks."""
 
-    input_catalogs = PrerequisiteInput(
+    input_catalogs = Input(
         doc="Per-patch and per-band injected catalogs to draw inputs from.",
         name="{injected_prefix}deepCoadd_catalog",
         dimensions=("skymap", "tract", "patch", "band"),

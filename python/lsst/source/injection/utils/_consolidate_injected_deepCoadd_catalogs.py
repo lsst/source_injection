@@ -205,23 +205,20 @@ def _get_patches(
 
 
 def getPatchInner(
-    catalog: Table,
     patchInfo,
-    col_ra: str = "ra",
-    col_dec: str = "dec",
+    ra: np.ndarray,
+    dec: np.ndarray,
 ):
     """Set a flag for each source if it is in the innerBBox of a patch.
 
     Parameters
     ----------
-    catalog: `astropy.table.Table`
-        A catalog of sources.
     patchInfo : `lsst.skymap.PatchInfo`
         Information about a `SkyMap` `Patch`.
-    col_ra: `str`
-        Column name for right ascension (in degrees).
-    col_dec: `str`
-        Column name for declination (in degrees).
+    ra: `np.ndarray`
+        Right ascension values in degrees.
+    dec: `np.ndarray`
+        Declination values in degrees.
 
     Returns
     -------
@@ -229,10 +226,6 @@ def getPatchInner(
         `True` for each source that has a centroid
         in the inner region of a patch.
     """
-    # Extract positions for all the sources.
-    ra = catalog[col_ra]
-    dec = catalog[col_dec]
-
     # convert the coordinates to pixel positions
     wcs = patchInfo.getWcs()
     x, y = wcs.skyToPixelArray(ra, dec, degrees=True)
@@ -245,26 +238,23 @@ def getPatchInner(
 
 
 def getTractInner(
-    catalog,
     tractInfo,
     skyMap,
-    col_ra: str = "ra",
-    col_dec: str = "dec",
+    ra: np.ndarray,
+    dec: np.ndarray,
 ):
     """Set a flag for each source that the skyMap includes in tractInfo.
 
     Parameters
     ----------
-    catalog: `astropy.table.Table`
-        A catalog of sources.
     tractInfo : `lsst.skymap.TractInfo`
         Tract object
     skyMap : `lsst.skymap.BaseSkyMap`
         Sky tessellation object
-    col_ra: `str`
-        Column name for right ascension (in degrees).
-    col_dec: `str`
-        Column name for declination (in degrees).
+    ra: `np.ndarray`
+        Right ascension values in degrees.
+    dec: `np.ndarray`
+        Declination values in degrees.
 
     Returns
     -------
@@ -272,10 +262,11 @@ def getTractInner(
         True if the skyMap.findTract method returns
         the same tract as tractInfo.
     """
-    ras, decs = catalog[col_ra].value, catalog[col_dec].value
-    skyCoords = [SpherePoint(ra, dec, degrees) for (ra, dec) in list(zip(ras, decs))]
     tractId = tractInfo.getId()
-    isTractInner = np.array([skyMap.findTract(coord).getId() == tractId for coord in skyCoords])
+    isTractInner = np.array(
+        [skyMap.findTract(SpherePoint(_ra, _dec, degrees)).getId() == tractId for _ra, _dec in zip(ra, dec)]
+    )
+
     return isTractInner
 
 
@@ -327,11 +318,12 @@ def setPrimaryFlags(
     # Mark whether sources are contained within the inner regions of the
     # given tract/patch.
     isPatchInner = np.array([False] * len(catalog))
+    ra, dec = catalog[col_ra].values, catalog[col_dec].values
     for patch in patches:
         patchMask = catalog["patch"] == patch
         patchInfo = tractInfo.getPatchInfo(patch)
-        isPatchInner[patchMask] = getPatchInner(catalog[patchMask], patchInfo, col_ra, col_dec)
-    isTractInner = getTractInner(catalog, tractInfo, skyMap)
+        isPatchInner[patchMask] = getPatchInner(patchInfo, ra[patchMask], dec[patchMask])
+    isTractInner = getTractInner(tractInfo, skyMap, ra, dec)
     isPrimary = isTractInner & isPatchInner & (catalog[injectionKey] == 0)
 
     catalog[isPatchInnerKey] = isPatchInner

@@ -23,6 +23,8 @@ import logging
 import os
 import unittest
 
+import numpy as np
+
 import lsst.utils.tests
 from lsst.daf.butler.tests import makeTestCollection, makeTestRepo
 from lsst.daf.butler.tests.utils import makeTestTempDir, removeTestTempDir
@@ -30,8 +32,9 @@ from lsst.obs.base.instrument_tests import DummyCam
 from lsst.pipe.base import Pipeline
 from lsst.skymap.ringsSkyMap import RingsSkyMap, RingsSkyMapConfig
 from lsst.source.injection import (
+    ConsolidateInjectedCatalogsConfig,
+    ConsolidateInjectedCatalogsTask,
     ExposureInjectTask,
-    consolidate_injected_deepCoadd_catalogs,
     ingest_injection_catalog,
     make_injection_pipeline,
 )
@@ -74,7 +77,14 @@ class SourceInjectionUtilsTestCase(TestCase):
             self.exposure.getWcs(),
             self.exposure.getBBox(),
         )
+        n_rows = len(self.injection_catalog)
+        group_ids = np.arange(n_rows)
+        group_ids[int(n_rows / 4) : int((n_rows * 3) / 4) : 2] -= 1
+        self.injection_catalog["group_id"] = group_ids
         self.reference_pipeline = make_test_reference_pipeline()
+        self.consolidate_injected_config = ConsolidateInjectedCatalogsConfig(
+            get_catalogs_from_butler=False,
+        )
         self.injected_catalog = self.injection_catalog.copy()
         self.injected_catalog.add_columns(cols=[0, 0], names=["injection_draw_size", "injection_flag"])
         self.injected_catalog["injection_flag"][:5] = 1
@@ -87,7 +97,7 @@ class SourceInjectionUtilsTestCase(TestCase):
 
     def test_generate_injection_catalog(self):
         self.assertEqual(len(self.injection_catalog), 30)
-        expected_columns = {"injection_id", "ra", "dec", "source_type", "mag"}
+        expected_columns = {"injection_id", "ra", "dec", "source_type", "mag", "group_id"}
         self.assertEqual(set(self.injection_catalog.columns), expected_columns)
 
     def test_make_injection_pipeline(self):
@@ -156,19 +166,11 @@ class SourceInjectionUtilsTestCase(TestCase):
 
     def test_consolidate_injected_catalogs(self):
         catalog_dict = {"g": self.injected_catalog, "r": self.injected_catalog}
-        output_catalog = consolidate_injected_deepCoadd_catalogs(
+        output_catalog = self.consolidate_injected_config.consolidate_deepCoadd(
             catalog_dict=catalog_dict,
             skymap=self.skyMap,
             tract=9,
-            pixel_match_radius=0.1,
-            get_catalogs_from_butler=False,
-            col_ra="ra",
-            col_dec="dec",
-            col_mag="mag",
-            isPatchInnerKey="injected_isPatchInner",
-            isTractInnerKey="injected_isTractInner",
-            isPrimaryKey="injected_isPrimary",
-            injectionKey="injection_flag",
+            copy_catalogs=True,
         )
         self.assertEqual(len(output_catalog), 30)
         expected_columns = {
@@ -179,6 +181,7 @@ class SourceInjectionUtilsTestCase(TestCase):
             "source_type",
             "g_mag",
             "r_mag",
+            "patch",
             "injection_draw_size",
             "injection_flag",
             "injected_isPatchInner",
@@ -190,6 +193,61 @@ class SourceInjectionUtilsTestCase(TestCase):
         self.assertEqual(sum(output_catalog["injected_isPatchInner"]), 30)
         self.assertEqual(sum(output_catalog["injected_isTractInner"]), 30)
         self.assertEqual(sum(output_catalog["injected_isPrimary"]), 25)
+
+    def test_consolidate_injected_catalog_task(self):
+        group_id_key = "group_id"
+        config = ConsolidateInjectedCatalogsConfig(
+            groupIdKey=group_id_key,
+            pixel_match_radius=-1,
+            columns_extra=[],
+            get_catalogs_from_butler=False,
+        )
+        task = ConsolidateInjectedCatalogsTask(config=config)
+        catalog_dict = {"g": self.injected_catalog, "r": self.injected_catalog}
+        output_catalog = task.run(
+            catalog_dict=catalog_dict,
+            skymap=self.skyMap,
+            tract=9,
+        ).output_catalog
+        groupIds, counts = np.unique(
+            self.injection_catalog[group_id_key],
+            return_counts=True,
+        )
+        n_comps = np.max(counts)
+        self.assertEqual(len(output_catalog), len(groupIds))
+        expected_columns = [
+            config.groupIdKey,
+            config.injectionKey,
+            config.col_ra,
+            config.col_dec,
+        ]
+        for band in catalog_dict.keys():
+            columns_band = [
+                f"{band}_{config.injectionKey}",
+                f"{band}_{config.col_mag}",
+            ]
+            for compnum in range(1, n_comps + 1):
+                columns_band.extend(
+                    [
+                        f"{band}_comp{compnum}_source_type",
+                        f"{band}_comp{compnum}_{config.injectionKey}",
+                    ]
+                )
+            expected_columns.extend(columns_band)
+        expected_columns.extend(
+            [
+                "patch",
+                "injected_isPatchInner",
+                "injected_isTractInner",
+                "injected_isPrimary",
+                "injected_id",
+            ]
+        )
+        self.assertEqual(set(output_catalog.colnames), set(expected_columns))
+        self.assertEqual(sum(output_catalog["injection_flag"]), 5)
+        self.assertEqual(sum(output_catalog["injected_isPatchInner"]), 22)
+        self.assertEqual(sum(output_catalog["injected_isTractInner"]), 22)
+        self.assertEqual(sum(output_catalog["injected_isPrimary"]), 17)
 
 
 class MemoryTestCase(MemoryTestCase):

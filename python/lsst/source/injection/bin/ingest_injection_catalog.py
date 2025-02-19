@@ -27,9 +27,26 @@ from argparse import SUPPRESS, ArgumentParser
 
 from astropy.table import Table
 from lsst.daf.butler import Butler
+from lsst.daf.butler.formatters.parquet import ParquetFormatter, arrow_to_astropy, pq
 
 from ..utils import ingest_injection_catalog
 from .source_injection_help_formatter import SourceInjectionHelpFormatter
+
+
+def _is_parquet(filename: str):
+    """Return if a filename has a parquet extension.
+
+    Notes
+    -----
+    This could be replaced with astropy.io.misc.parquet_identify, which has
+    additional functionality to open the file and validate the first set of
+    bytes.
+    """
+    extensions = {".parquet", ".parq"} | {
+        ParquetFormatter.default_extension,
+    }
+
+    return filename.endswith(tuple(extensions))
 
 
 def build_argparser():
@@ -39,7 +56,9 @@ def build_argparser():
 
 This script reads an on-disk input catalog or multiple per-band input catalogs
 and ingests these data into the butler. Catalogs are read in using the astropy
-Table API.
+Table API. Parquet filenames will be read through daf_butler functions, whereas
+other file types will attempt to use astropy.table.Table.read. See DM-44159 for
+details.
 
 An attempt at auto-identification of the input catalog file format type will be
 made for each input. A manually specified format can instead be specified for
@@ -136,10 +155,17 @@ def main():
         injection_catalogs_band = []
         for injection_catalog in injection_catalogs_group["injection_catalog"]:
             # The character_as_bytes=False option is preferred, if possible.
-            try:
-                tbl = Table.read(injection_catalog, format=injection_catalog_format, character_as_bytes=False)
-            except TypeError:
-                tbl = Table.read(injection_catalog, format=injection_catalog_format)
+            if isinstance(injection_catalog, str) and _is_parquet(injection_catalog):
+                tbl = arrow_to_astropy(pq.read_table(injection_catalog, use_threads=False))
+            else:
+                try:
+                    tbl = Table.read(
+                        injection_catalog,
+                        format=injection_catalog_format,
+                        character_as_bytes=False,
+                    )
+                except TypeError:
+                    tbl = Table.read(injection_catalog, format=injection_catalog_format)
             injection_catalogs_band.append(tbl)
 
         _ = ingest_injection_catalog(

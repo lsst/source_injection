@@ -31,6 +31,7 @@ __all__ = [
 import numpy as np
 from astropy.table import Table, vstack
 from astropy.table.column import MaskedColumn
+from lsst.daf.butler import DatasetProvenance
 from lsst.geom import Box2D, SpherePoint, degrees
 from lsst.pex.config import Field
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
@@ -161,6 +162,11 @@ def _get_catalogs(
         tracts.add(ref.dataId.tract.id)
     # Stack the per-band catalogs.
     for band, catalog_list in catalog_dict.items():
+        for cat in catalog_list:
+            # Strip provenance from catalogs before merging to avoid the
+            # provenance headers triggering warnings in the astropy naive
+            # metadata merge tool.
+            DatasetProvenance.strip_provenance_from_flat_dict(cat.meta)
         catalog_dict[band] = vstack(catalog_list)
     # Check that only catalogs covered by a single tract are loaded.
     if len(tracts) != 1:

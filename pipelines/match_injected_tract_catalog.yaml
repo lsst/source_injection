@@ -15,7 +15,7 @@ tasks:
       match_tract_catalog.columns_target_copy: ["objectId"]
       match_tract_catalog.columns_ref_select_true: ["injected_isPrimary"]
       match_tract_catalog.columns_ref_select_false: ["injection_flag"]
-      match_tract_catalog.columns_target_select_true: ["detect_isDeblendedSource", "detect_isPatchInner"]
+      match_tract_catalog.columns_target_select_true: ["detect_isPrimary"]
       match_tract_catalog.columns_target_select_false: ["merge_peak_sky"]
       match_tract_catalog.match_n_finite_min: 2
       match_tract_catalog.order_ascending: true

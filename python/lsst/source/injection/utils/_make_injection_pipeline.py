@@ -28,6 +28,7 @@ import logging
 
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
+from lsst.pipe.base.pipelineIR import ContractError
 
 
 def _parse_config_override(config_override: str) -> tuple[str, str, str]:
@@ -373,5 +374,28 @@ def make_injection_pipeline(
             task_grammar,
             subset_grammar,
         )
+
+    # Validate contracts, and remove any that are violated
+    try:
+        _ = pipeline.to_graph()
+    except ContractError:
+        contracts_initial = pipeline._pipelineIR.contracts
+        pipeline._pipelineIR.contracts = []
+        contracts_passed = []
+        contracts_failed = []
+        for contract in contracts_initial:
+            pipeline._pipelineIR.contracts = [contract]
+            try:
+                _ = pipeline.to_graph()
+            except ContractError:
+                contracts_failed.append(contract)
+                continue
+            contracts_passed.append(contract)
+        pipeline._pipelineIR.contracts = contracts_passed
+        if contracts_failed:
+            logger.warning(
+                "The following contracts were violated and have been removed: \n%s",
+                "\n".join([str(contract) for contract in contracts_failed]),
+            )
 
     return pipeline

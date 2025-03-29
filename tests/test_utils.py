@@ -58,6 +58,7 @@ class SourceInjectionUtilsTestCase(TestCase):
         skyMapConfig = RingsSkyMapConfig()
         skyMapConfig.numRings = 3
         cls.skyMap = RingsSkyMap(config=skyMapConfig)
+        logging.disable(logging.CRITICAL)  # Suppress logging output
 
     @classmethod
     def tearDownClass(cls):
@@ -65,6 +66,7 @@ class SourceInjectionUtilsTestCase(TestCase):
         del cls.creator_butler
         del cls.skyMap
         removeTestTempDir(cls.root)
+        logging.disable(logging.NOTSET)  # Re-enable logging output
 
     def setUp(self):
         self.exposure = make_test_exposure()

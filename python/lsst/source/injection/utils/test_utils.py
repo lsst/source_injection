@@ -27,7 +27,7 @@ from lsst.geom import Box2I, Extent2I, Point2D, Point2I, SpherePoint, degrees
 from lsst.ip.isr.isrTask import IsrTask
 from lsst.meas.algorithms.testUtils import plantSources
 from lsst.pipe.base import Pipeline
-from lsst.pipe.base.pipelineIR import LabeledSubset
+from lsst.pipe.base.pipelineIR import ContractIR, LabeledSubset
 from lsst.pipe.tasks.calibrate import CalibrateTask
 from lsst.pipe.tasks.characterizeImage import CharacterizeImageTask
 from lsst.source.injection import generate_injection_catalog
@@ -128,4 +128,19 @@ def make_test_reference_pipeline():
     reference_pipeline.addLabelToSubset("test_subset", "isr")
     reference_pipeline.addLabelToSubset("test_subset", "characterizeImage")
     reference_pipeline.addLabelToSubset("test_subset", "calibrate")
+    isr_out = "isr.connections.ConnectionsClass(config=isr).outputExposure.name"
+    char_inp = "characterizeImage.connections.ConnectionsClass(config=characterizeImage).exposure.name"
+    char_out = "characterizeImage.connections.ConnectionsClass(config=characterizeImage).characterized.name"
+    calib_inp = "calibrate.connections.ConnectionsClass(config=calibrate).exposure.name"
+    # When injecting into a postISRCCD, contract1 should be violated.
+    # The make_injection_pipeline utility should be robust to this.
+    contract1 = ContractIR(
+        contract=f"{isr_out} == {char_inp}",
+        msg="isr output == characterizeImage input",
+    )
+    contract2 = ContractIR(
+        contract=f"{char_out} == {calib_inp}",
+        msg="characterizeImage output == calibrate input",
+    )
+    reference_pipeline._pipelineIR.contracts = [contract1, contract2]
     return reference_pipeline

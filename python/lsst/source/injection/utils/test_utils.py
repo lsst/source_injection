@@ -21,6 +21,7 @@
 
 
 import numpy as np
+
 from lsst.afw.geom import makeCdMatrix, makeSkyWcs
 from lsst.afw.image import makePhotoCalibFromCalibZeroPoint
 from lsst.geom import Box2I, Extent2I, Point2D, Point2I, SpherePoint, degrees

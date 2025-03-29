@@ -23,9 +23,10 @@ import unittest
 from types import GeneratorType
 
 import galsim
-import lsst.utils.tests
 import numpy as np
 from galsim import BoundsI, GSObject
+
+import lsst.utils.tests
 from lsst.geom import Point2D, SpherePoint, degrees
 from lsst.source.injection.inject_engine import (
     generate_galsim_objects,

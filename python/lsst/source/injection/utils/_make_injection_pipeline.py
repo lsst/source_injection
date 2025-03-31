@@ -105,6 +105,11 @@ def make_injection_pipeline(
     injected subsets will be the original subset name with the prefix
     'injected_' prepended.
 
+    When the injection pipeline is constructed, a check on all existing
+    pipeline contracts is performed. If any contracts are violated, they are
+    removed from the pipeline. A warning is logged for each contract that is
+    removed.
+
     Parameters
     ----------
     dataset_type_name : `str`

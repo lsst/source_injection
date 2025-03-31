@@ -8,7 +8,7 @@
  Making a Fully Qualified Source Injection Pipeline
 ----------------------------------------------------
 
-In the `source_injection` package, one of the first things a user can do is to construct their own pipeline YAML file.
+In the `source_injection` package, one of the first things a user should do is construct their own injected pipeline YAML file.
 This file takes a reference pipeline YAML (for example, the HSC DRP-RC2 pipeline definition YAML) and merges in a source injection task of your choice.
 We refer to this "merged" pipeline as a "fully qualified" pipeline definition YAML.
 
@@ -49,6 +49,17 @@ Tasks from the reference pipeline may either be removed or have specific configu
     For example, if the ``inject_exposure.yaml`` pipeline stub is used to inject sources into a ``postISRCCD`` dataset type, the ``step1`` subset of the reference pipeline will be updated to also include the ``inject_exposure`` task.
     This behavior can be disabled by passing the ``-e`` argument on the command line, or setting ``exclude_subsets`` to ``True`` in Python.
     Additionally, a new subset, ``injected_step1``, will also be created containing all tasks from the ``step1`` subset but with the ``isr`` task removed (as sources will be injected after this task has run).
+
+.. note::
+
+    After a fully qualified injection pipeline has been generated, a check is performed to ensure that all reference :ref:`pipeline contracts <pipeline_creating_contracts>` (if any) are satisfied.
+    Pipeline contracts are a means by which to ensure that certain configuration values are set in a predictable manner.
+    When generating an injection pipeline, it's possible that some of these contracts will become invalid.
+    For example, if a contract specifies that the dataset type produced by a task prior to source injection matches the dataset type consumed by a task after source injection, this contract may become invalid if the tasks downstream of source injection have been modified to instead consume the new source injected input.
+    The :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script and the :py:func:`~lsst.source.injection.make_injection_pipeline` Python function will check for this and warn if any contracts are invalid.
+    Invalid contracts will be removed from the final output pipeline YAML.
+
+.. _contracts: https://github.com/lsst/source_injection/blob/main/pipelines/inject_exposure.yaml
 
 The table below lists the available pipeline YAML stubs inside the ``$SOURCE_INJECTION_DIR/pipelines`` directory and the dataset types they are designed to inject sources into:
 

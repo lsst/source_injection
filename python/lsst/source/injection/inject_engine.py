@@ -34,6 +34,7 @@ import numpy.ma as ma
 from astropy.io import fits
 from astropy.table import Table
 from galsim import GalSimFFTSizeError
+
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import ExposureF, PhotoCalib
 from lsst.geom import Box2I, Point2D, Point2I, SpherePoint, arcseconds, degrees

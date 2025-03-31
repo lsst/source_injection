@@ -31,6 +31,8 @@ __all__ = [
 import numpy as np
 from astropy.table import Table, vstack
 from astropy.table.column import MaskedColumn
+from smatch.matcher import Matcher  # type: ignore [import-not-found]
+
 from lsst.daf.butler import DatasetProvenance
 from lsst.geom import Box2D, SpherePoint, degrees
 from lsst.pex.config import Field
@@ -38,7 +40,6 @@ from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnect
 from lsst.pipe.base.connections import InputQuantizedConnection
 from lsst.pipe.base.connectionTypes import Input, Output
 from lsst.skymap import BaseSkyMap
-from smatch.matcher import Matcher  # type: ignore [import-not-found]
 
 
 class ConsolidateInjectedCatalogsConnections(

@@ -28,6 +28,7 @@ import logging
 
 from lsst.analysis.tools.interfaces import AnalysisPipelineTask
 from lsst.pipe.base import LabelSpecifier, Pipeline
+from lsst.pipe.base.pipelineIR import ContractError
 
 
 def _parse_config_override(config_override: str) -> tuple[str, str, str]:
@@ -103,6 +104,11 @@ def make_injection_pipeline(
     containing only the tasks which are affected by source injection. New
     injected subsets will be the original subset name with the prefix
     'injected_' prepended.
+
+    When the injection pipeline is constructed, a check on all existing
+    pipeline contracts is performed. If any contracts are violated, they are
+    removed from the pipeline. A warning is logged for each contract that is
+    removed.
 
     Parameters
     ----------
@@ -272,11 +278,18 @@ def make_injection_pipeline(
     # Attempt to infer the injection pipeline from the dataset type name.
     if not injection_pipeline:
         match dataset_type_name:
-            case "postISRCCD":
+            case "postISRCCD" | "post_isr_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
-            case "icExp" | "calexp" | "initial_pvi" | "pvi":
+            case "icExp" | "calexp" | "initial_pvi" | "pvi | preliminary_visit_image | visit_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
-            case "deepCoadd" | "deepCoadd_calexp" | "goodSeeingCoadd":
+            case (
+                "deepCoadd"
+                | "deepCoadd_calexp"
+                | "goodSeeingCoadd"
+                | "deep_coadd_predetection"
+                | "deep_coadd"
+                | "template_coadd"
+            ):
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_coadd.yaml"
             case _:
                 # Print a warning rather than a raise, as the user may wish to
@@ -373,5 +386,28 @@ def make_injection_pipeline(
             task_grammar,
             subset_grammar,
         )
+
+    # Validate contracts, and remove any that are violated
+    try:
+        _ = pipeline.to_graph()
+    except ContractError:
+        contracts_initial = pipeline._pipelineIR.contracts
+        pipeline._pipelineIR.contracts = []
+        contracts_passed = []
+        contracts_failed = []
+        for contract in contracts_initial:
+            pipeline._pipelineIR.contracts = [contract]
+            try:
+                _ = pipeline.to_graph()
+            except ContractError:
+                contracts_failed.append(contract)
+                continue
+            contracts_passed.append(contract)
+        pipeline._pipelineIR.contracts = contracts_passed
+        if contracts_failed:
+            logger.warning(
+                "The following contracts were violated and have been removed: \n%s",
+                "\n".join([str(contract) for contract in contracts_failed]),
+            )
 
     return pipeline

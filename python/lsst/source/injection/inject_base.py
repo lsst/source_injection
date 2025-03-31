@@ -31,6 +31,7 @@ import numpy.ma as ma
 from astropy import units
 from astropy.table import Table, hstack, vstack
 from astropy.units import Quantity, UnitConversionError
+
 from lsst.afw.image.exposure.exposureUtils import bbox_contains_sky_coords
 from lsst.pex.config import ChoiceField, Field, ListField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct

@@ -26,6 +26,7 @@ import time
 from argparse import SUPPRESS, ArgumentParser
 
 from astropy.table import Table
+
 from lsst.daf.butler import Butler
 from lsst.daf.butler.formatters.parquet import ParquetFormatter, arrow_to_astropy, pq
 

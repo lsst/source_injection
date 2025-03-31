@@ -31,8 +31,9 @@ from typing import Any
 
 import numpy as np
 from astropy.table import Table, hstack
-from lsst.afw.geom import SkyWcs
 from scipy.stats import qmc
+
+from lsst.afw.geom import SkyWcs
 
 
 def generate_injection_catalog(

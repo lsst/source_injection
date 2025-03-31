@@ -27,6 +27,7 @@ import logging
 
 import esutil
 from astropy.table import Table, vstack
+
 from lsst.daf.butler import Butler, CollectionType, DatasetRef, DatasetType
 
 

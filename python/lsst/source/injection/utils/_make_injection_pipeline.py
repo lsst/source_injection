@@ -278,11 +278,18 @@ def make_injection_pipeline(
     # Attempt to infer the injection pipeline from the dataset type name.
     if not injection_pipeline:
         match dataset_type_name:
-            case "postISRCCD":
+            case "postISRCCD" | "post_isr_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
-            case "icExp" | "calexp" | "initial_pvi" | "pvi":
+            case "icExp" | "calexp" | "initial_pvi" | "pvi | preliminary_visit_image | visit_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
-            case "deepCoadd" | "deepCoadd_calexp" | "goodSeeingCoadd":
+            case (
+                "deepCoadd"
+                | "deepCoadd_calexp"
+                | "goodSeeingCoadd"
+                | "deep_coadd_predetection"
+                | "deep_coadd"
+                | "template_coadd"
+            ):
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_coadd.yaml"
             case _:
                 # Print a warning rather than a raise, as the user may wish to

@@ -68,9 +68,9 @@ The table below lists the available pipeline YAML stubs inside the ``$SOURCE_INJ
     :stub-columns: 1
 
     * - Injection Dataset Type
-      - ``postISRCCD``
-      - ``calexp``
-      - ``deepCoadd``
+      - Exposure-level image (e.g. ``post_isr_image``)
+      - Visit-level image (e.g. ``visit_image``)
+      - Coadd-level image (e.g. ``deep_coadd_predetection``)
     * - Injection Pipeline Stub
       - inject_exposure.yaml_
       - inject_visit.yaml_

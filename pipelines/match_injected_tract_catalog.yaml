@@ -39,13 +39,19 @@ tasks:
         "u_mag", "g_mag", "r_mag", "i_mag", "z_mag", "y_mag",
         "u_injection_flag", "g_injection_flag", "r_injection_flag",
         "i_injection_flag", "z_injection_flag", "y_injection_flag",
+        "injection_flag", "injected_isPatchInner", "injected_isTractInner", "injected_isPrimary",
       ]
       columns_target_coord_err: ["coord_raErr", "coord_decErr"]
       columns_target_copy: [
+        "objectId",
         "u_psfFlux", "g_psfFlux", "r_psfFlux", "i_psfFlux", "z_psfFlux", "y_psfFlux",
         "u_psfFluxErr", "g_psfFluxErr", "r_psfFluxErr", "i_psfFluxErr", "z_psfFluxErr", "y_psfFluxErr",
         "u_psfFlux_flag", "g_psfFlux_flag", "r_psfFlux_flag",
         "i_psfFlux_flag", "z_psfFlux_flag", "y_psfFlux_flag",
+        "u_sersicFlux", "g_sersicFlux", "r_sersicFlux", "i_sersicFlux", "z_sersicFlux", "y_sersicFlux",
+        "u_sersicFluxErr", "g_sersicFluxErr", "r_sersicFluxErr",
+        "i_sersicFluxErr", "z_sersicFluxErr", "y_sersicFluxErr",
+        "sersic_ra", "sersic_dec",
         "patch", "detect_isDeblendedSource", "detect_isPatchInner", "detect_isPrimary", "merge_peak_sky",
         "refExtendedness", "refSizeExtendedness",
       ]

@@ -173,8 +173,7 @@ class SourceInjectionUtilsTestCase(TestCase):
             copy_catalogs=True,
         )
         self.assertEqual(len(output_catalog), 30)
-        expected_columns = {
-            "injection_id",
+        expected_columns = [
             "injected_id",
             "ra",
             "dec",
@@ -182,13 +181,17 @@ class SourceInjectionUtilsTestCase(TestCase):
             "g_mag",
             "r_mag",
             "patch",
+            "injection_id",
             "injection_draw_size",
             "injection_flag",
             "injected_isPatchInner",
             "injected_isTractInner",
             "injected_isPrimary",
-        }
-        self.assertEqual(set(output_catalog.columns), expected_columns)
+            "group_id",
+            "g_injection_flag",
+            "r_injection_flag",
+        ]
+        self.assertListEqual(output_catalog.colnames, expected_columns)
         self.assertEqual(sum(output_catalog["injection_flag"]), 5)
         self.assertEqual(sum(output_catalog["injected_isPatchInner"]), 30)
         self.assertEqual(sum(output_catalog["injected_isTractInner"]), 30)

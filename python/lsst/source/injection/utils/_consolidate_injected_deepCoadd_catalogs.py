@@ -412,6 +412,9 @@ class ConsolidateInjectedCatalogsConfig(  # type: ignore [call-arg]
             "injected_isTractInner",
             "injected_isPrimary",
         ]
+        for column in output_catalog.columns:
+            if column not in new_order:
+                new_order.append(column)
 
         return output_catalog[new_order]
 
@@ -680,6 +683,15 @@ class ConsolidateInjectedCatalogsConfig(  # type: ignore [call-arg]
                 index=1,
                 name=self.injectionKey,
             )
+        else:
+            # Fill in per-band injection flag columns
+            if not copy_catalogs:
+                multiband_catalog[self.injectionKey][:] = catalog_dict[bands[0]][self.injectionKey][:]
+            multiband_catalog[f"{bands[0]}_{self.injectionKey}"] = multiband_catalog[self.injectionKey]
+            for band in bands[1:]:
+                injected_band = catalog_dict[band][self.injectionKey]
+                multiband_catalog[self.injectionKey] &= injected_band
+                multiband_catalog[f"{band}_{self.injectionKey}"] = injected_band
 
         # Fill any automatically masked values with NaNs if possible (float)
         # Otherwise, use the dtype's minimum value (for int, bool, etc.)

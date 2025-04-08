@@ -434,6 +434,9 @@ class ConsolidateInjectedCatalogsConfig(  # type: ignore [call-arg]
             tables for items.
         match_radius: `float`
             The radius for matching catalogs across bands in arcsec.
+        copy_catalogs: `bool`
+            Whether to copy the input catalogs; if False, they will be modified
+            in-place.
 
         Returns
         -------

@@ -13,9 +13,9 @@ tasks:
       match_tract_catalog.columns_target_err: ["coord_raErr", "coord_decErr"]
       match_tract_catalog.columns_ref_copy: ["injected_id"]
       match_tract_catalog.columns_target_copy: ["objectId"]
-      match_tract_catalog.columns_ref_select_true: ["injected_isPatchInner"]
+      match_tract_catalog.columns_ref_select_true: ["injected_isPrimary"]
       match_tract_catalog.columns_ref_select_false: ["injection_flag"]
-      match_tract_catalog.columns_target_select_true: ["detect_isDeblendedSource", "detect_isPatchInner"]
+      match_tract_catalog.columns_target_select_true: ["detect_isPrimary"]
       match_tract_catalog.columns_target_select_false: ["merge_peak_sky"]
       match_tract_catalog.match_n_finite_min: 2
       match_tract_catalog.order_ascending: true
@@ -31,18 +31,27 @@ tasks:
       column_matched_prefix_ref: "ref_"
       # TODO: Remove as part of DM-44139
       columns_ref_mag_to_nJy: {
-        g_mag: "g_flux", r_mag: "r_flux", i_mag: "i_flux", z_mag: "z_flux", y_mag: "y_flux",
+        "u_mag": "u_flux", "g_mag": "g_flux", "r_mag": "r_flux",
+        "i_mag": "i_flux", "z_mag": "z_flux", "y_mag": "y_flux",
       }
       columns_ref_copy: [
         "injected_id", "source_type",
-        "g_mag", "r_mag", "i_mag", "z_mag", "y_mag",
-        "injection_flag", "injected_isPatchInner",
+        "u_mag", "g_mag", "r_mag", "i_mag", "z_mag", "y_mag",
+        "u_injection_flag", "g_injection_flag", "r_injection_flag",
+        "i_injection_flag", "z_injection_flag", "y_injection_flag",
+        "injection_flag", "injected_isPatchInner", "injected_isTractInner", "injected_isPrimary",
       ]
       columns_target_coord_err: ["coord_raErr", "coord_decErr"]
       columns_target_copy: [
-        "g_psfFlux", "r_psfFlux", "i_psfFlux", "z_psfFlux", "y_psfFlux",
-        "g_psfFluxErr", "r_psfFluxErr", "i_psfFluxErr", "z_psfFluxErr", "y_psfFluxErr",
-        "g_psfFlux_flag", "r_psfFlux_flag", "i_psfFlux_flag", "z_psfFlux_flag", "y_psfFlux_flag",
+        "objectId",
+        "u_psfFlux", "g_psfFlux", "r_psfFlux", "i_psfFlux", "z_psfFlux", "y_psfFlux",
+        "u_psfFluxErr", "g_psfFluxErr", "r_psfFluxErr", "i_psfFluxErr", "z_psfFluxErr", "y_psfFluxErr",
+        "u_psfFlux_flag", "g_psfFlux_flag", "r_psfFlux_flag",
+        "i_psfFlux_flag", "z_psfFlux_flag", "y_psfFlux_flag",
+        "u_sersicFlux", "g_sersicFlux", "r_sersicFlux", "i_sersicFlux", "z_sersicFlux", "y_sersicFlux",
+        "u_sersicFluxErr", "g_sersicFluxErr", "r_sersicFluxErr",
+        "i_sersicFluxErr", "z_sersicFluxErr", "y_sersicFluxErr",
+        "sersic_ra", "sersic_dec",
         "patch", "detect_isDeblendedSource", "detect_isPatchInner", "detect_isPrimary", "merge_peak_sky",
         "refExtendedness", "refSizeExtendedness",
       ]

@@ -151,7 +151,7 @@ def main():
     injection_catalogs_groups = injection_catalogs_table.group_by("band")
 
     for injection_catalogs_group in injection_catalogs_groups.groups:
-        band = injection_catalogs_group["band"][0]
+        band = str(injection_catalogs_group["band"][0])
 
         injection_catalogs_band = []
         for injection_catalog in injection_catalogs_group["injection_catalog"]:

@@ -154,6 +154,7 @@ def make_injection_pipeline(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
 
+    retry_config_overrides = []
     # Load the pipeline and apply config overrides, if supplied.
     if isinstance(reference_pipeline, str):
         pipeline = Pipeline.fromFile(reference_pipeline)
@@ -164,7 +165,17 @@ def make_injection_pipeline(
             config = [config]
         for conf in config:
             config_label, config_key, config_value = _parse_config_override(conf)
-            pipeline.addConfigOverride(config_label, config_key, config_value)
+            try:
+                pipeline.addConfigOverride(config_label, config_key, config_value)
+            except LookupError:
+                logger.warning(
+                    "Config override '%s' for label '%s' not found in the pipeline. "
+                    "This may be due to a typo or the label not existing in the pipeline."
+                    "Retrying after injection tasks are added.",
+                    conf,
+                    config_label,
+                )
+                retry_config_overrides.append([config_label, config_key, config_value])
 
     # Add an instrument override, if provided.
     if instrument:
@@ -280,7 +291,7 @@ def make_injection_pipeline(
         match dataset_type_name:
             case "postISRCCD" | "post_isr_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
-            case "icExp" | "calexp" | "initial_pvi" | "pvi | preliminary_visit_image | visit_image":
+            case "icExp" | "calexp" | "initial_pvi" | "pvi" | "preliminary_visit_image" | "visit_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
             case (
                 "deepCoadd"
@@ -331,6 +342,14 @@ def make_injection_pipeline(
                     precursor_subsets = pipeline.findSubsetsWithLabel(label)
                     for subset in precursor_subsets:
                         pipeline.addLabelToSubset(subset, injection_task_label)
+        if retry_config_overrides:
+            # Retry config overrides that were not found in the pipeline before
+            # the injection task was added.
+            for config_label, config_key, config_value in retry_config_overrides:
+                try:
+                    pipeline.addConfigOverride(config_label, config_key, config_value)
+                except LookupError:
+                    raise
 
     # Create injected subsets.
     injected_label_specifier = LabelSpecifier(labels=injected_tasks)

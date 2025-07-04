@@ -136,7 +136,7 @@ the pipeline. A warning is logged for each contract that is removed.
     )
     parser.add_argument(
         "-s",
-        "--subset-name",
+        "--subset-names",
         type=str,
         help="All tasks from any additional pipelines will be added to this subset."
         "The subset will be created if it does not already exist.",

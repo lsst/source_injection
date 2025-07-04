@@ -86,7 +86,7 @@ def make_injection_pipeline(
     instrument: str | None = None,
     config: str | list[str] | None = None,
     additional_pipelines: list[Pipeline] | list[str] | None = None,
-    subset_name: str | None = None,
+    subset_names: str | list[str] | None = None,
     subset_description: str = "",
     log_level: int = logging.INFO,
 ) -> Pipeline:
@@ -135,12 +135,12 @@ def make_injection_pipeline(
         Location(s) of additional input pipeline definition YAML file(s).
         Tasks from these additional pipelines will be added to the output
         injection pipeline.
-    subset_name: `str`, optional
-        All tasks from any additional pipelines will be added to this subset.
+    subset_names: `str`, optional
+        All tasks from any additional pipelines will be added to this subsets.
         The subset will be created if it does not already exist.
-    subset_description: `str`, optional
-        The description given to a new subset which holds tasks from additional
-        pipelines provided. Note: this argument is ignored if the subset
+    subset_descriptions: `str`, optional
+        The descriptions given to new subsets which hold tasks from additional
+        pipelines provided. Note: this argument is ignored if the subsets
         already exists.
     log_level : `int`, optional
         The log level to use for logging.
@@ -154,6 +154,7 @@ def make_injection_pipeline(
     logger = logging.getLogger(__name__)
     logger.setLevel(log_level)
 
+    retry_config_overrides = []
     # Load the pipeline and apply config overrides, if supplied.
     if isinstance(reference_pipeline, str):
         pipeline = Pipeline.fromFile(reference_pipeline)
@@ -164,7 +165,17 @@ def make_injection_pipeline(
             config = [config]
         for conf in config:
             config_label, config_key, config_value = _parse_config_override(conf)
-            pipeline.addConfigOverride(config_label, config_key, config_value)
+            try:
+                pipeline.addConfigOverride(config_label, config_key, config_value)
+            except LookupError:
+                logger.warning(
+                    "Config override '%s' for label '%s' not found in the pipeline. "
+                    "This may be due to a typo or the label not existing in the pipeline."
+                    "Retrying after injection tasks are added.",
+                    conf,
+                    config_label,
+                )
+                retry_config_overrides.append([config_label, config_key, config_value])
 
     # Add an instrument override, if provided.
     if instrument:
@@ -280,7 +291,7 @@ def make_injection_pipeline(
         match dataset_type_name:
             case "postISRCCD" | "post_isr_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
-            case "icExp" | "calexp" | "initial_pvi" | "pvi | preliminary_visit_image | visit_image":
+            case "icExp" | "calexp" | "initial_pvi" | "pvi" | "preliminary_visit_image" | "visit_image":
                 injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
             case (
                 "deepCoadd"
@@ -331,6 +342,14 @@ def make_injection_pipeline(
                     precursor_subsets = pipeline.findSubsetsWithLabel(label)
                     for subset in precursor_subsets:
                         pipeline.addLabelToSubset(subset, injection_task_label)
+        if retry_config_overrides:
+            # Retry config overrides that were not found in the pipeline before
+            # the injection task was added.
+            for config_label, config_key, config_value in retry_config_overrides:
+                try:
+                    pipeline.addConfigOverride(config_label, config_key, config_value)
+                except LookupError:
+                    raise
 
     # Create injected subsets.
     injected_label_specifier = LabelSpecifier(labels=injected_tasks)
@@ -369,14 +388,17 @@ def make_injection_pipeline(
             pipeline.mergePipeline(additional_pipeline)
 
         # Add all tasks to subset_name. If the subset does not exist create it.
-        if isinstance(subset_name, str):
-            if subset_name in pipeline.subsets.keys():
-                for additional_task in additional_tasks:
-                    pipeline.addLabelToSubset(subset_name, additional_task)
-                    subset_grammar = f"the existing subset {subset_name}"
-            else:
-                pipeline.addLabeledSubset(subset_name, subset_description, additional_tasks)
-                subset_grammar = f"a new subset {subset_name}"
+        if isinstance(subset_names, str):
+            subset_names = subset_names.split(",")
+        if isinstance(subset_names, list):
+            for subset_name in subset_names:
+                if subset_name in pipeline.subsets.keys():
+                    for additional_task in additional_tasks:
+                        pipeline.addLabelToSubset(subset_name, additional_task)
+                        subset_grammar = f"the existing subset {subset_name}"
+                else:
+                    pipeline.addLabeledSubset(subset_name, subset_description, additional_tasks)
+                    subset_grammar = f"a new subset {subset_name}"
 
         # Logging info.
         task_grammar = "task" if len(additional_tasks) == 1 else "tasks"

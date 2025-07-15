@@ -104,6 +104,9 @@ class SourceInjectionUtilsTestCase(TestCase):
         injection_pipeline = Pipeline("injection_pipeline")
         injection_pipeline.addTask(ExposureInjectTask, "inject_exposure")
 
+        additional_pipeline = Pipeline("additional_pipeline")
+        additional_pipeline.addTask(ConsolidateInjectedCatalogsTask, "additional_task")
+
         # Explicitly set connection names to non-default values.
         injection_pipeline.addConfigOverride("inject_exposure", "connections.input_exposure", "A")
         injection_pipeline.addConfigOverride("inject_exposure", "connections.output_exposure", "B")
@@ -118,6 +121,8 @@ class SourceInjectionUtilsTestCase(TestCase):
             excluded_tasks={"calibrate"},
             prefix="injected_",
             instrument="lsst.obs.subaru.HyperSuprimeCam",
+            additional_pipelines=[additional_pipeline],
+            additional_subset=["newSubset:newSubset description"],
             log_level=logging.DEBUG,
         )
 
@@ -129,6 +134,7 @@ class SourceInjectionUtilsTestCase(TestCase):
         # Test that all surviving tasks are still in a subset.
         surviving_task_subsets = [merged_pipeline.findSubsetsWithLabel(x) for x in surviving_task_labels]
         self.assertEqual(sum(1 for s in surviving_task_subsets if s), len(surviving_task_labels))
+        self.assertIn("newSubset", merged_pipeline.findSubsetsWithLabel("additional_task"))
 
         # Test that connection names have been properly configured.
         for t in merged_pipeline.to_graph().tasks.values():

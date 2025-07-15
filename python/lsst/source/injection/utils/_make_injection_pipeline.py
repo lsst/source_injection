@@ -135,7 +135,7 @@ def make_injection_pipeline(
         Tasks from these additional pipelines will be added to the output
         injection pipeline.
     additional_subset: `list`[`str`], optional
-        A list of subset definitions (e.g., "mySubset:Description for mySubset").
+        A list of subset definitions (e.g., "subset:Description for subset").
         All tasks from `additional_pipelines` will be added to these subsets.
     subset_descriptions: `str`, optional
         The descriptions given to new subsets which hold tasks from additional
@@ -384,7 +384,6 @@ def make_injection_pipeline(
             pipeline.mergePipeline(additional_pipeline)
 
         # Add all tasks to subset_name. If the subset does not exist create it.
-        # TODO: reflect single and multiple subsets additions, and existing cases
         if not isinstance(additional_subset, list) and additional_subset is not None:
             additional_subset = [additional_subset]
         for subset in additional_subset:

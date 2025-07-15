@@ -134,13 +134,11 @@ def make_injection_pipeline(
         Location(s) of additional input pipeline definition YAML file(s).
         Tasks from these additional pipelines will be added to the output
         injection pipeline.
-    additional_subset: `list`[`str`], optional
-        A list of subset definitions (e.g., "mySubset:Description for mySubset").
-        All tasks from `additional_pipelines` will be added to these subsets.
-    subset_descriptions: `str`, optional
-        The descriptions given to new subsets which hold tasks from additional
-        pipelines provided. Note: this argument is ignored if the subsets
-        already exists.
+    additional_subset: `list`[`str`] | `str`, optional
+        A list of subset definitions in the form
+        "subset_name[:subset_description]".
+        These subsets will be created if they don't already exist.
+        All tasks from additional_pipelines will be added to these subsets.
     log_level : `int`, optional
         The log level to use for logging.
 
@@ -168,8 +166,8 @@ def make_injection_pipeline(
                 pipeline.addConfigOverride(config_label, config_key, config_value)
             except LookupError:
                 logger.debug(
-                    "Config override '%s' for label '%s' not found in the reference"
-                    " pipeline, either due to a typo or the label not existing in "
+                    "Config override '%s' for label '%s' not found in the reference "
+                    "pipeline, either due to a typo or the label not existing in "
                     "the reference pipeline. Retrying after the injection task is added.",
                     conf,
                     config_label,
@@ -384,7 +382,6 @@ def make_injection_pipeline(
             pipeline.mergePipeline(additional_pipeline)
 
         # Add all tasks to subset_name. If the subset does not exist create it.
-        # TODO: reflect single and multiple subsets additions, and existing cases
         if not isinstance(additional_subset, list) and additional_subset is not None:
             additional_subset = [additional_subset]
         for subset in additional_subset:
@@ -395,7 +392,6 @@ def make_injection_pipeline(
                 subset_description = ""
 
             if subset_name in pipeline.subsets.keys():
-
                 for additional_task in additional_tasks:
                     pipeline.addLabelToSubset(subset_name, additional_task)
                     subset_grammar = f"the existing subset {subset_name}"

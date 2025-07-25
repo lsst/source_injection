@@ -33,7 +33,7 @@ import astropy.table
 import astropy.units as u
 import numpy as np
 from astropy.table import Table, join, vstack
-from astropy.table.column import MaskedColumn
+from astropy.table.column import Column, MaskedColumn
 from smatch.matcher import Matcher  # type: ignore [import-not-found]
 
 from lsst.daf.butler import DatasetProvenance
@@ -546,15 +546,22 @@ class ConsolidateInjectedCatalogsConfig(  # type: ignore [call-arg]
                     # One component is sufficient to say it was injected
                     injection_flag[idx_old] &= not injected
 
+                    # Convert any masked columns to regular nan-valued arrays
                     if is_multicomp:
                         column = values_comp[f"{band}_{prefix_comp}flux"]
-                        column.mask[idx_old] = False
-                        column[idx_old] = flux_comp
+                        if isinstance(column, MaskedColumn):
+                            column.mask[idx_old] = False
+                            column[idx_old] = Column(column)
+                        else:
+                            column[idx_old] = flux_comp
 
                     for column_comp in columns_comp:
-                        column = f"{band}_{prefix_comp}{column_comp}"
-                        values_comp[column].mask[idx_old] = False
-                        values_comp[column][idx_old] = row[column_comp]
+                        column = values_comp[f"{band}_{prefix_comp}{column_comp}"]
+                        if isinstance(column, MaskedColumn):
+                            column.mask[idx_old] = False
+                            column[idx_old] = Column(column)
+                        else:
+                            column[idx_old] = row[column_comp]
 
                 if is_multicomp:
                     mag = (flux * u.nJy).to(u.ABmag).value

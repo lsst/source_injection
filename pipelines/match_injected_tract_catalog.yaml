@@ -1,4 +1,8 @@
 description: Match tract-level injected_deepCoadd_catalog datasets to injected_objectTable_tract datasets.
+parameters:
+  bands_injected: ["u", "g", "r", "i", "z", "y"]
+  flux_algorithms: ["cModel", "gaap1p0", "gaap3p0", "kron", "psf", "sersic"]
+  source_type_column: "source_type"
 tasks:
   consolidate_injected_catalogs:
     class: lsst.source.injection.utils.ConsolidateInjectedCatalogsTask
@@ -29,30 +33,48 @@ tasks:
       connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
       connections.name_input_cat_target: injected_objectTable_tract
       column_matched_prefix_ref: "ref_"
-      # TODO: Remove as part of DM-44139
-      columns_ref_mag_to_nJy: {
-        "u_mag": "u_flux", "g_mag": "g_flux", "r_mag": "r_flux",
-        "i_mag": "i_flux", "z_mag": "z_flux", "y_mag": "y_flux",
-      }
-      columns_ref_copy: [
-        "injected_id", "source_type",
-        "u_mag", "g_mag", "r_mag", "i_mag", "z_mag", "y_mag",
-        "u_injection_flag", "g_injection_flag", "r_injection_flag",
-        "i_injection_flag", "z_injection_flag", "y_injection_flag",
-        "injection_flag", "injected_isPatchInner", "injected_isTractInner", "injected_isPrimary",
-      ]
       columns_target_coord_err: ["coord_raErr", "coord_decErr"]
-      columns_target_copy: [
-        "objectId",
-        "u_psfFlux", "g_psfFlux", "r_psfFlux", "i_psfFlux", "z_psfFlux", "y_psfFlux",
-        "u_psfFluxErr", "g_psfFluxErr", "r_psfFluxErr", "i_psfFluxErr", "z_psfFluxErr", "y_psfFluxErr",
-        "u_psfFlux_flag", "g_psfFlux_flag", "r_psfFlux_flag",
-        "i_psfFlux_flag", "z_psfFlux_flag", "y_psfFlux_flag",
-        "u_sersicFlux", "g_sersicFlux", "r_sersicFlux", "i_sersicFlux", "z_sersicFlux", "y_sersicFlux",
-        "u_sersicFluxErr", "g_sersicFluxErr", "r_sersicFluxErr",
-        "i_sersicFluxErr", "z_sersicFluxErr", "y_sersicFluxErr",
-        "sersic_ra", "sersic_dec",
-        "patch", "detect_isDeblendedSource", "detect_isPatchInner", "detect_isPrimary", "merge_peak_sky",
-        "refExtendedness", "refSizeExtendedness",
-      ]
       include_unmatched: true
+      python: |
+        columns_ref_mag_to_nJy = {}
+        columns_ref_copy = [
+          "injected_id", parameters.source_type_column, "injection_flag",
+          "injected_isPatchInner", "injected_isTractInner", "injected_isPrimary",
+        ]
+        columns_target_copy = [
+          "objectId", "patch", "detect_isDeblendedSource", "detect_isPatchInner", "detect_isPrimary",
+          "merge_peak_sky", "refExtendedness", "refSizeExtendedness",
+        ]
+        bands = parameters.bands_injected
+        for band in bands:
+          columns_ref_mag_to_nJy[f"{band}_mag"] = f"{band}_flux"
+        for band in bands:
+          for suffix in ("mag", "injection_flag"):
+              columns_ref_copy.append(f"{band}_{suffix}")
+          done_gaap = False
+          for algo in parameters.flux_algorithms:
+            is_gaap = algo.startswith("gaap")
+            if not done_gaap and is_gaap:
+              columns_target_copy.append(f"{band}_gaapFlux_flag")
+              done_gaap = True
+            suffixes = ["Flux", "FluxErr"]
+            if is_gaap:
+              suffixes.append("Flux_flag_bigPsf")
+            elif algo == "cModel":
+              suffixes.append("_flag")
+            elif algo != "sersic":
+              suffixes.append("Flux_flag")
+            for suffix in suffixes:
+              columns_target_copy.append(f"{band}_{algo}{suffix}")
+        if "sersic" in parameters.flux_algorithms:
+          columns_target_copy.extend([
+            "sersic_x", "sersic_y", "sersic_xErr", "sersic_yErr",
+            "sersic_ra", "sersic_dec", "sersic_raErr", "sersic_decErr",
+            "sersic_index", "sersic_indexErr", "sersic_rho", "sersic_rhoErr",
+            "sersic_reff_x", "sersic_reff_xErr", "sersic_reff_y", "sersic_reff_yErr",
+            "sersic_unknown_flag", "sersic_no_data_flag",
+          ])
+        # TODO: Remove as part of DM-44139
+        config.columns_ref_mag_to_nJy = columns_ref_mag_to_nJy
+        config.columns_ref_copy = columns_ref_copy
+        config.columns_target_copy = columns_target_copy

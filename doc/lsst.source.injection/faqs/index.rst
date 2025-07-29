@@ -363,7 +363,9 @@ The example below demonstrates how to use the `SimplePipelineExecutor` to run a 
     .. code-block:: python
 
         import os
-        from lsst.ctrl.mpexec import SimplePipelineExecutor
+        from lsst.pipe.base.simple_pipeline_executor import (
+            SimplePipelineExecutor,
+        )
         from lsst.pipe.base import Pipeline
 
         user = os.getenv("USER")

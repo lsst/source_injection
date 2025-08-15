@@ -136,19 +136,15 @@ the pipeline. A warning is logged for each contract that is removed.
     )
     parser.add_argument(
         "-s",
-        "--subset-name",
+        "--additional-subset",
         type=str,
-        help="All tasks from any additional pipelines will be added to this subset."
-        "The subset will be created if it does not already exist.",
-        metavar="FILE",
-    )
-    parser.add_argument(
-        "-d",
-        "--subset-description",
-        type=str,
-        help="The description given to a new subset which holds tasks from additional pipelines provided."
-        "Note: this argument is ignored if the subset already exists.",
-        metavar="FILE",
+        help="Subset for additional tasks, in the form 'name[:description]'."
+        "All tasks from any additional pipelines will be added into this subset."
+        "The subset will be created if it does not already exist."
+        "Description text is optional, and ignored if the subset already exists."
+        "This argument can be specified multiple times to add multiple subsets.",
+        metavar="TEXT",
+        action="append",
     )
     parser.add_argument(
         "-h",

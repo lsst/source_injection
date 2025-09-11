@@ -46,7 +46,7 @@ Tasks from the reference pipeline may either be removed or have specific configu
     Furthermore, a series of ``injected_*`` subsets will be constructed.
     These ``injected_*`` subsets are copies of existent subsets, but with any tasks not directly impacted by source injection removed.
 
-    For example, if the ``inject_exposure.yaml`` pipeline stub is used to inject sources into a ``postISRCCD`` dataset type, the ``step1`` subset of the reference pipeline will be updated to also include the ``inject_exposure`` task.
+    For example, if the ``inject_exposure.yaml`` pipeline stub is used to inject sources into a ``post_isr_image`` dataset type, the ``step1`` subset of the reference pipeline will be updated to also include the ``inject_exposure`` task.
     This behavior can be disabled by passing the ``-e`` argument on the command line, or setting ``exclude_subsets`` to ``True`` in Python.
     Additionally, a new subset, ``injected_step1``, will also be created containing all tasks from the ``step1`` subset but with the ``isr`` task removed (as sources will be injected after this task has run).
 
@@ -106,7 +106,7 @@ Make an Injection Pipeline on the Command Line
 The :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script is used to generate a complete source injection pipeline definition YAML file.
 More information on the operation of this script may be obtained by running ``make_injection_pipeline --help``.
 
-As an example on the command line, to create a pipeline YAML which will inject a synthetic source into a `postISRCCD` exposure-type dataset type using the HSC DRP-RC2 pipeline as a reference:
+As an example on the command line, to create a pipeline YAML which will inject a synthetic source into a `post_isr_image` exposure-type dataset type using the HSC DRP-RC2 pipeline as a reference:
 
 .. code-block:: shell
 
@@ -121,8 +121,8 @@ As an example on the command line, to create a pipeline YAML which will inject a
         The path to the `drp_pipe` package directory.
 
 The above command will save a complete and fully expanded pipeline definition file into the file ``DRP-RC2+injection.yaml``.
-In this example, synthetic sources are to be injected into the ``postISRCCD`` dataset type, using the ``HSC/DRP-RC2.yaml`` pipeline definition file as a reference.
-As the ``postISRCCD`` dataset type has dimensions of ``exposure``, the ``inject_exposure.yaml`` source injection pipeline definition file stub has been automatically inferred.
+In this example, synthetic sources are to be injected into the ``post_isr_image`` dataset type, using the ``HSC/DRP-RC2.yaml`` pipeline definition file as a reference.
+As the ``post_isr_image`` dataset type has dimensions of ``exposure``, the ``inject_exposure.yaml`` source injection pipeline definition file stub has been automatically inferred.
 That particular injection pipeline YAML stub contains the :lsst-task:`~lsst.source.injection.ExposureInjectTask` task.
 
 .. tip::
@@ -154,7 +154,7 @@ The :py:func:`~lsst.source.injection.make_injection_pipeline` Python function is
 
 More information on the operation of this function may be obtained by calling ``make_injection_pipeline?`` in a Python interpreter.
 
-As an example in Python, to create a pipeline which will inject a synthetic source into a `postISRCCD` exposure-type dataset type using the HSC DRP-RC2 pipeline as a reference:
+As an example in Python, to create a pipeline which will inject a synthetic source into a `post_isr_image` exposure-type dataset type using the HSC DRP-RC2 pipeline as a reference:
 
 .. code-block:: python
 
@@ -298,7 +298,7 @@ To help improve the layout of the graph, the ``unflatten`` preprocessing filter 
 .. code-block:: shell
 
     INPUT_PIPELINE=DRP-RC2+injection.yaml#step1
-    OUTPUT_FILE=DRP-RC2_step1_with_injected_postISRCCD.png
+    OUTPUT_FILE=DRP-RC2_step1_with_injected_post_isr_image.png
     OUTPUT_EXT=${OUTPUT_FILE##*.}  # Resolves to: pdf/svg/png/jpg/...
 
     # Create the directed graph from an input pipeline.
@@ -310,7 +310,7 @@ To help improve the layout of the graph, the ``unflatten`` preprocessing filter 
     # Draw the directed graph.
     dot graph_post.dot -T$OUTPUT_EXT > $OUTPUT_FILE
 
-The output PNG from the above example injection into a ``postISRCCD`` type is shown below (left panel).
+The output PNG from the above example injection into a ``post_isr_image`` type is shown below (left panel).
 Equivalent graphs for injections into ``calexp`` (central panel) and ``deepCoadd`` (right panel) types are also shown, for reference.
 
 .. list-table::

@@ -350,7 +350,7 @@ The injected catalog may be used to overplot the coordinates of injected sources
 
     # Assuming the injected_postISRCCD/injected_postISRCCD_catalog are loaded.
 
-    # Get the WCS information from the finalVisitSummary table initially used.
+    # Get the WCS information from the visit_summary table initially used.
     butler = Butler(REPO)
     dataId = dict(
         instrument="HSC",
@@ -358,7 +358,7 @@ The injected catalog may be used to overplot the coordinates of injected sources
         detector=51,
     )
     visit_summary = butler.get(
-        "finalVisitSummary",
+        "visit_summary",
         dataId=dataId,
         collections=INPUT_DATA_COLL,
     )

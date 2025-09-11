@@ -737,8 +737,9 @@ def inject_galsim_objects_into_exposure(
             common_variance = galsim_variance[object_common_bounds]
 
             offset = posd - object_common_bounds.true_center
-            # Note, for calexp injection, pixel is already part of the PSF and
-            # for coadd injection, it's incorrect to include the output pixel.
+            # Note, for preliminary_visit_image injection, pixel is already
+            # part of the PSF and for coadd injection, it's incorrect to
+            # include the output pixel.
             # So for both cases, we draw using method='no_pixel'.
             image_template = common_image.copy()
             try:

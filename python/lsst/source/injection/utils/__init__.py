@@ -31,11 +31,11 @@ Modules
 _make_injection_pipeline : Create source injection pipelines.
 _generate_injection_catalog : Generate source injection catalogs.
 _ingest_injection_catalog : Ingest source injection catalogs into a repository.
-_consolidate_injected_deepCoadd_catalogs : Consolidate per-patch injected
-    deepCoadd catalogs into a single per-tract table.
+_consolidate_injected_coadd_catalogs : Consolidate per-patch injected
+    coadd catalogs into a single per-tract table.
 """
 
-from ._consolidate_injected_deepCoadd_catalogs import *  # noqa: F401,F403
+from ._consolidate_injected_coadd_catalogs import *  # noqa: F401,F403
 from ._generate_injection_catalog import *  # noqa: F401,F403
 from ._ingest_injection_catalog import *  # noqa: F401,F403
 from ._make_injection_pipeline import *  # noqa: F401,F403

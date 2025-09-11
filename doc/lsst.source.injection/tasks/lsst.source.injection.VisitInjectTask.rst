@@ -19,8 +19,9 @@ The `GalSim`_ software package is used to generate synthetic postage stamps
 .. _GalSim: https://galsim-developers.github.io/GalSim/
 
 As an output, an `injected_` variant of the input dataset type will be created.
-For visit-level imaging, the default input is a `calexp` dataset type,
-producing an `injected_calexp` output.
+For visit-level imaging, the default input is a
+`preliminary_visit_image` dataset type, producing an
+`injected_preliminary_visit_image` output.
 
 .. _lsst.source.injection.VisitInjectTask-summary:
 

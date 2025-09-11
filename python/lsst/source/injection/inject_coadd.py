@@ -39,19 +39,19 @@ class CoaddInjectConnections(
 
     input_exposure = Input(
         doc="Exposure to inject synthetic sources into.",
-        name="{coadd_name}Coadd",
+        name="{coadd_name}_coadd_predetection",
         storageClass="ExposureF",
         dimensions=("skymap", "tract", "patch", "band"),
     )
     output_exposure = Output(
         doc="Injected Exposure.",
-        name="{injected_prefix}{coadd_name}Coadd",
+        name="{injected_prefix}{coadd_name}_coadd_predetection",
         storageClass="ExposureF",
         dimensions=("skymap", "tract", "patch", "band"),
     )
     output_catalog = Output(
         doc="Catalog of injected sources.",
-        name="{injected_prefix}{coadd_name}Coadd_catalog",
+        name="{injected_prefix}{coadd_name}_coadd_predetection_catalog",
         storageClass="ArrowAstropy",
         dimensions=("skymap", "tract", "patch", "band"),
     )

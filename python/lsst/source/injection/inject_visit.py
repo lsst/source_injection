@@ -39,26 +39,26 @@ class VisitInjectConnections(  # type: ignore [call-arg]
 
     visit_summary = Input(
         doc="A visit summary table containing PSF, PhotoCalib and WCS information.",
-        name="finalVisitSummary",
+        name="visit_summary",
         storageClass="ExposureCatalog",
         dimensions=("visit",),
         deferLoad=True,
     )
     input_exposure = Input(
         doc="Exposure to inject synthetic sources into.",
-        name="calexp",
+        name="preliminary_visit_image",
         storageClass="ExposureF",
         dimensions=("instrument", "visit", "detector"),
     )
     output_exposure = Output(
         doc="Injected Exposure.",
-        name="{injected_prefix}calexp",
+        name="{injected_prefix}preliminary_visit_image",
         storageClass="ExposureF",
         dimensions=("instrument", "visit", "detector"),
     )
     output_catalog = Output(
         doc="Catalog of injected sources.",
-        name="{injected_prefix}calexp_catalog",
+        name="{injected_prefix}preliminary_visit_image_catalog",
         storageClass="ArrowAstropy",
         dimensions=("instrument", "visit", "detector"),
     )

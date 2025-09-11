@@ -19,8 +19,8 @@ The `GalSim`_ software package is used to generate synthetic postage stamps
 .. _GalSim: https://galsim-developers.github.io/GalSim/
 
 As an output, an `injected_` variant of the input dataset type will be created.
-For exposure-level imaging, the default input is a `postISRCCD` dataset type,
-producing an `injected_postISRCCD` output.
+For exposure-level imaging, the default input is a `post_isr_image` dataset
+type, producing an `injected_post_isr_image` output.
 
 .. _lsst.source.injection.ExposureInjectTask-summary:
 

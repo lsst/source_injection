@@ -160,28 +160,28 @@ For example, to find the visit numbers for all ``raw`` dataset types registered 
     # Extract the visit number for all overlapping raw datasets.
     injection_visits = sorted({x["visit"] for x in injection_raw_ids})
 
-The process for finding overlapping tracts and patches is similar, instead querying the ``deepCoadd`` dataset type:
+The process for finding overlapping tracts and patches is similar, instead querying the ``deep_coadd_predetection`` dataset type:
 
 .. code-block:: python
 
-    # Get the data IDs for all overlapping deepCoadd datasets.
-    injection_deepCoadd_ids = set(
+    # Get the data IDs for all overlapping coadd datasets.
+    injection_coadd_ids = set(
         butler.registry.queryDataIds(
             ["tract", "patch"],
-            datasets="deepCoadd",
+            datasets="deep_coadd_predetection",
             where=f"htm7 IN {injection_trixels} AND band='i'",
             collections="HSC/runs/RC2/w_2023_32/DM-40356",
         )
     )
 
-    # Extract the tract IDs for all overlapping deepCoadd datasets.
-    injection_tracts = sorted({x["tract"] for x in injection_deepCoadd_ids})
+    # Extract the tract IDs for all overlapping coadd datasets.
+    injection_tracts = sorted({x["tract"] for x in injection_coadd_ids})
 
     # Format the results into injection_tract_patch_dict.
     injection_tract_patch_dict = {}
-    for injection_deepCoadd_id in injection_deepCoadd_ids:
-        tract_id = injection_deepCoadd_id["tract"]
-        patch_id = injection_deepCoadd_id["patch"]
+    for injection_coadd_id in injection_coadd_ids:
+        tract_id = injection_coadd_id["tract"]
+        patch_id = injection_coadd_id["patch"]
         if tract_id in injection_tract_patch_dict:
             injection_tract_patch_dict[tract_id].append(patch_id)
         else:
@@ -262,29 +262,29 @@ Tract IDs are used as keys, with a list of patch IDs as values.
 
 .. _lsst.source.injection-faqs-final-visit-summary:
 
-Why am I seeing 'CRITICAL: No datasets of type finalVisitSummary in collection' when I try to run source injection?
+Why am I seeing 'CRITICAL: No datasets of type visit_summary in collection' when I try to run source injection?
 =====================================================================================================================
 
-This error is raised when you try to run visit-level source injection and your input collection does not contain a ``finalVisitSummary`` dataset.
-The ``finalVisitSummary`` table is a visit-level data product from a prior data reduction run.
+This error is raised when you try to run visit-level source injection and your input collection does not contain a ``visit_summary`` dataset.
+The ``visit_summary`` table is a visit-level data product from a prior data reduction run.
 It contains our best-estimate final measurements for various visit-level data products, such as the PSF, photometric calibration and WCS solution.
 
-Source injection into visit-level data typically requires a ``finalVisitSummary`` dataset to be present in the input collection, unless use of these external data have been explicitly disabled by the user (e.g., by setting ``external_psf=False`` in the case of the PSF).
+Source injection into visit-level data typically requires a ``visit_summary`` dataset to be present in the input collection, unless use of these external data have been explicitly disabled by the user (e.g., by setting ``external_psf=False`` in the case of the PSF).
 
 .. caution::
 
-    Where possible, it is strongly recommended to use a ``finalVisitSummary`` table for visit-level source injection.
+    Where possible, it is strongly recommended to use a ``visit_summary`` table for visit-level source injection.
 
-    If use of external data from the ``finalVisitSummary`` table *has* been disabled by the user at runtime, the injection task will instead attempt to use internal data products attached to the visit-level dataset.
+    If use of external data from the ``visit_summary`` table *has* been disabled by the user at runtime, the injection task will instead attempt to use internal data products attached to the visit-level dataset.
     This may result in degraded performance, particularly for the WCS solution, or may prevent data reduction from progressing at all for injection into some early dataset types.
 
-To resolve the CRITICAL error, check your input collections to ensure that they contain a ``finalVisitSummary`` dataset from a prior data-reduction run.
-You can query the butler registry to find all available ``finalVisitSummary`` datasets in your data repository.
-For example, to query for all ``finalVisitSummary`` tables for HSC visit 1228:
+To resolve the CRITICAL error, check your input collections to ensure that they contain a ``visit_summary`` dataset from a prior data-reduction run.
+You can query the butler registry to find all available ``visit_summary`` datasets in your data repository.
+For example, to query for all ``visit_summary`` tables for HSC visit 1228:
 
 .. code-block:: shell
 
-    butler query-datasets $REPO finalVisitSummary \
+    butler query-datasets $REPO visit_summary \
     --where "instrument='HSC' AND visit=1228"
 
 *where*
@@ -414,7 +414,7 @@ The example below demonstrates how to use the `SimplePipelineExecutor` to run a 
             dtype.name:ref[0] for dtype, ref in quanta[0].outputs.items()
         }
         print(f"available dataset types: {list(dataset_refs.keys())}")
-        injected_deepCoadd = butler.get(dataset_refs["injected_deepCoadd"])
+        injected_deep_coadd_predetection = butler.get(dataset_refs["injected_deep_coadd_predetection"])
 
 .. _lsst.source.injection-faqs-restrictions-guidelines-conventions:
 

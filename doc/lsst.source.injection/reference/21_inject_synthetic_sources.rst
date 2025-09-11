@@ -11,7 +11,7 @@
 Synthetic sources can be injected into any imaging data product output by the LSST Science Pipelines.
 This is useful for testing algorithmic performance on simulated data, where the truth is known, and for various subsequent quality assurance tasks.
 
-The sections below describe how to inject synthetic sources into a visit-level exposure-type or visit-type datasets (i.e., datasets with the dimension ``exposure`` or ``visit``), or into a coadd-level coadded dataset.
+The sections below describe how to inject synthetic sources into a visit-level exposure-type or visit-type datasets (i.e., datasets with the dimension ``exposure`` or ``visit``), or into a coadd-level co-added dataset.
 Options for injection on the command line and in Python are presented.
 
 Prior to injection, the instructions on this page assume that the user will already have in-place a fully qualified source injection pipeline definition YAML (see :ref:`lsst.source.injection-ref-make`) and a suitable synthetic source injection catalog describing the sources to be injected (see :ref:`lsst.source.injection-ref-generate`) which has been ingested into the data butler (see :ref:`lsst.source.injection-ref-ingest`).
@@ -22,16 +22,16 @@ Injection on the Command Line
 =============================
 
 Source injection on the command line is performed using the :command:`pipetask run` command.
-The process for injection into visit-level imaging (i.e., ``exposure`` or ``visit`` type data) or injection into coadd-level imaging (e.g., a `deepCoadd``) is largely the same, save for the use of a different data query and a different injection task or pipeline subset.
+The process for injection into visit-level imaging (i.e., ``exposure`` or ``visit`` type data) or injection into coadd-level imaging (e.g., a `deep_coadd_predetection``) is largely the same, save for the use of a different data query and a different injection task or pipeline subset.
 
-The following command line example injects synthetic sources into the HSC exposure 1228, detector 51, ``postISRCCD`` dataset.
+The following command line example injects synthetic sources into the HSC exposure 1228, detector 51, ``post_isr_image`` dataset.
 For the purposes of this example, we will run the entirety of the HSC DRP RC2 step 1 subset.
 This subset contains all the tasks necessary to process raw science data through to initial visit-level calibrated outputs.
 The step 1 subset will have had the ``inject_exposure`` task (:lsst-task:`~lsst.source.injection.ExposureInjectTask`) merged into it following a successful run of :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>`.
 
 .. tip::
 
-    Injection into a coadd-level data product such as a ``deepCoadd`` can easily be achieved by substituting ``step1`` for ``step3`` in the command below and modifying the ``-d`` data query.
+    Injection into a coadd-level data product such as a ``deep_coadd_predetection`` can easily be achieved by substituting ``step1`` for ``step3`` in the command below and modifying the ``-d`` data query.
     For the injection catalog generated in these notes, this coadd-level data query would work well:
 
     .. code-block::
@@ -78,7 +78,7 @@ The step 1 subset will have had the ``inject_exposure`` task (:lsst-task:`~lsst.
     These only run tasks including and after the injection task.
     The ``injected_stepN`` subsets can save memory and runtime if the tasks prior to injection have already been run.
 
-The image plane of the ``injected_postISRCCD`` will be modified from the original by the addition of a light profile for every injected object.
+The image plane of the ``injected_post_isr_image`` will be modified from the original by the addition of a light profile for every injected object.
 By default the injected light profiles have simulated shot noise added. This can be turned off by setting ``add_noise`` to ``False`` in the injection task config.
 The variance plane gains additional estimated variance consistent with the amount of light added to the image plane, including any simulated noise.
 
@@ -87,8 +87,8 @@ The variance plane gains additional estimated variance consistent with the amoun
     Setting ``inject_variance`` to ``False`` in the injection task config will prevent any changes to the variance plane.
     This is likely to bias any downstream measurements and should normally never be done, unless such bias is the object of study.
 
-Assuming processing completes successfully, the ``injected_postISRCCD`` and associated ``injected_postISRCCD_catalog`` will be written to the butler repository.
-Various downstream ``step1`` data products should also exist, including the ``injected_calexp`` dataset type (see example images below).
+Assuming processing completes successfully, the ``injected_post_isr_image`` and associated ``injected_post_isr_image_catalog`` will be written to the butler repository.
+Various downstream ``step1`` data products should also exist, including the ``injected_preliminary_visit_image`` dataset type (see example images below).
 
 Standard log messages that get printed as part of a successful run may include lines similar to:
 
@@ -112,7 +112,9 @@ An example injected output produced by the above snippet is shown below.
 
     ..
 
-    Calibrated exposure (``calexp`` and ``injected_calexp``) data for HSC visit 1228, detector 51, showcasing the injection of a series of synthetic Sérsic sources.
+    Calibrated exposure (``preliminary_visit_image`` and
+    ``injected_preliminary_visit_image``) data for HSC visit 1228, detector
+    51, showcasing the injection of a series of synthetic Sérsic sources.
     Images are asinh scaled across the central 98% flux range and smoothed with a Gaussian kernel of FWHM 5 pixels.
 
     .. list-table::
@@ -154,7 +156,7 @@ Injection in Python
 Source injection in Python is achieved by using the source injection task classes directly.
 As on the command line, the process for injection into visit-level imaging or coadd-level imaging is largely the same, save for the use of a different task class, a different data query, and use of different calibration data products (see the notes in the Python snippet below).
 
-The following Python example injects synthetic sources into the HSC i-band tract 9813, patch 42, ``deepCoadd`` dataset.
+The following Python example injects synthetic sources into the HSC i-band tract 9813, patch 42, ``deep_coadd_predetection`` dataset.
 For the purposes of this example, we will just run the source injection task alone.
 
 .. code-block:: python
@@ -168,7 +170,7 @@ For the purposes of this example, we will just run the source injection task alo
     # Instantiate a butler.
     butler = Butler(REPO)
 
-    # Load an input deepCoadd dataset.
+    # Load an input coadd dataset.
     dataId = dict(
         instrument="HSC",
         skymap="hsc_rings_v1",
@@ -183,7 +185,7 @@ For the purposes of this example, we will just run the source injection task alo
     )
     # NOTE: Visit-level injections also require a visit summary table.
     # visit_summary = butler.get(
-    #     "finalVisitSummary",
+    #     "visit_summary",
     #     dataId=dataId,
     #     collections=INPUT_DATA_COLL,
     # )

@@ -30,7 +30,7 @@ from .inject_visit import VisitInjectConfig, VisitInjectConnections, VisitInject
 
 class ExposureInjectConnections(  # type: ignore [call-arg]
     VisitInjectConnections,
-    dimensions=("instrument", "visit", "detector"),
+    dimensions=("instrument", "exposure", "detector"),
 ):
     """Exposure-level connections for source injection tasks."""
 

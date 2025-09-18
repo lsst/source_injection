@@ -1,4 +1,4 @@
-description: Coadd-level source injection into coadded dataset types.
+description: Coadd-level source injection into co-added dataset types.
 tasks:
-  inject_coadd:
+  injectCoadd:
     class: lsst.source.injection.inject_coadd.CoaddInjectTask

@@ -11,7 +11,7 @@
 Synthetic sources can be injected into any imaging data product output by the LSST Science Pipelines.
 This is useful for testing algorithmic performance on simulated data, where the truth is known, and for various subsequent quality assurance tasks.
 
-The sections below describe how to inject synthetic sources into a visit-level exposure-type or visit-type datasets (i.e., datasets with the dimension ``exposure`` or ``visit``), or into a coadd-level co-added dataset.
+The sections below describe how to inject synthetic sources into a visit-level exposure-type or visit-type datasets (i.e., datasets with the dimension ``exposure`` or ``visit``), or into a coadd-level dataset.
 Options for injection on the command line and in Python are presented.
 
 Prior to injection, the instructions on this page assume that the user will already have in-place a fully qualified source injection pipeline definition YAML (see :ref:`lsst.source.injection-ref-make`) and a suitable synthetic source injection catalog describing the sources to be injected (see :ref:`lsst.source.injection-ref-generate`) which has been ingested into the data butler (see :ref:`lsst.source.injection-ref-ingest`).

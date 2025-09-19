@@ -312,7 +312,7 @@ class BaseInjectTask(PipelineTask):
                 inject_variance=self.config.inject_variance,
                 add_noise=self.config.add_noise,
                 noise_seed=self.config.noise_seed,
-                bad_mask_names=self.config.bad_mask_names,
+                bad_mask_names=list(self.config.bad_mask_names),
                 logger=self.log,
             )
             # Add inject_galsim_objects_into_exposure outputs into output cat.

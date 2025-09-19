@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-__all__ = ["BaseInjectConnections", "BaseInjectConfig", "BaseInjectTask"]
+__all__ = ["_ALLOWED_SOURCE_TYPES", "BaseInjectConnections", "BaseInjectConfig", "BaseInjectTask"]
 
 from typing import cast
 
@@ -38,6 +38,27 @@ from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnect
 from lsst.pipe.base.connectionTypes import PrerequisiteInput
 
 from .inject_engine import generate_galsim_objects, inject_galsim_objects_into_exposure
+
+_ALLOWED_SOURCE_TYPES = [
+    "Gaussian",
+    "Box",
+    "TopHat",
+    "DeltaFunction",
+    "Airy",
+    "Moffat",
+    "Kolmogorov",
+    "VonKarman",
+    "Exponential",
+    "DeVaucouleurs",
+    "Sersic",
+    "InclinedExponential",
+    "InclinedSersic",
+    "Spergel",
+    "RandomKnots",
+    "Star",
+    "Trail",
+    "Stamp",
+]
 
 
 class BaseInjectConnections(
@@ -625,27 +646,8 @@ class BaseInjectTask(PipelineTask):
 
         # Flag source types not supported by GalSim.
         input_source_types = set(injection_catalog["source_type"])
-        allowed_source_types = [
-            "Gaussian",
-            "Box",
-            "TopHat",
-            "DeltaFunction",
-            "Airy",
-            "Moffat",
-            "Kolmogorov",
-            "VonKarman",
-            "Exponential",
-            "DeVaucouleurs",
-            "Sersic",
-            "InclinedExponential",
-            "InclinedSersic",
-            "Spergel",
-            "RandomKnots",
-            "Trail",
-            "Stamp",
-        ]
         for input_source_type in input_source_types:
-            if input_source_type not in allowed_source_types:
+            if input_source_type not in _ALLOWED_SOURCE_TYPES:
                 unknown_source_types = injection_catalog["source_type"] == input_source_type
                 grammar = "source" if np.sum(unknown_source_types) == 1 else "sources"
                 self.log.warning(

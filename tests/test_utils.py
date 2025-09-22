@@ -22,6 +22,8 @@
 import logging
 import os
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 
 import numpy as np
 
@@ -37,13 +39,14 @@ from lsst.source.injection import (
     ExposureInjectTask,
     ingest_injection_catalog,
     make_injection_pipeline,
+    show_source_types,
 )
 from lsst.source.injection.utils.test_utils import (
     make_test_exposure,
     make_test_injection_catalog,
     make_test_reference_pipeline,
 )
-from lsst.utils.tests import MemoryTestCase, TestCase
+from lsst.utils.tests import TestCase
 
 TEST_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -258,8 +261,20 @@ class SourceInjectionUtilsTestCase(TestCase):
         self.assertEqual(sum(output_catalog["injected_isTractInner"]), 22)
         self.assertEqual(sum(output_catalog["injected_isPrimary"]), 17)
 
+    def test_show_source_types(self):
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            show_source_types(wrap_width=80)
+        output = buffer.getvalue()
+        self.assertIn(
+            "Sersic:\n"
+            "  (n, half_light_radius=None, scale_radius=None, mag=None, trunc=0.0,\n"
+            "   flux_untruncated=False)",
+            output,
+        )
 
-class MemoryTestCase(MemoryTestCase):
+
+class MemoryTestCase(lsst.utils.tests.MemoryTestCase):
     """Test memory usage of functions in this script."""
 
     pass

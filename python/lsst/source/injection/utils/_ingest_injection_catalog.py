@@ -47,7 +47,7 @@ def ingest_injection_catalog(
     are expected to contain the columns ``ra`` and ``dec``, with data in units
     of degrees. This spatial information will be used to shard up the source
     table on-disk using a depth 7 Hierarchical Triangular Mesh (HTM7) format.
-    HTM7 trixels have an area of ~0.315 square degreees.
+    HTM7 trixels have an area of ~0.315 square degrees.
 
     Parameters
     ----------

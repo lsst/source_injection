@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+#
 # This file is part of source_injection.
 #
 # Developed for the LSST Data Management System.
@@ -19,24 +21,9 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""
-The source_injection package provides functionality for injecting synthetic
-sources into astronomical images.
+from __future__ import annotations
 
-This sub-package contains utility functions and tasks for assisting in
-generating synthetic source inputs.
+from lsst.source.injection.bin.show_source_types import main
 
-Modules
--------
-_make_injection_pipeline : Create source injection pipelines.
-_generate_injection_catalog : Generate source injection catalogs.
-_ingest_injection_catalog : Ingest source injection catalogs into a repository.
-_consolidate_injected_deepCoadd_catalogs : Consolidate per-patch injected
-    deepCoadd catalogs into a single per-tract table.
-"""
-
-from ._consolidate_injected_deepCoadd_catalogs import *  # noqa: F401,F403
-from ._generate_injection_catalog import *  # noqa: F401,F403
-from ._ingest_injection_catalog import *  # noqa: F401,F403
-from ._make_injection_pipeline import *  # noqa: F401,F403
-from ._show_source_types import *  # noqa: F401,F403
+if __name__ == "__main__":
+    main()

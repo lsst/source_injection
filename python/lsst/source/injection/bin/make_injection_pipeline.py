@@ -60,7 +60,7 @@ the pipeline. A warning is logged for each contract that is removed.
         "-t",
         "--dataset-type-name",
         type=str,
-        help="Name of the datset type being injected into.",
+        help="Name of the dataset type being injected into.",
         required=True,
         metavar="TEXT",
     )

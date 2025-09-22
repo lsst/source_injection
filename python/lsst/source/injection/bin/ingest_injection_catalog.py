@@ -46,8 +46,9 @@ def _is_parquet(filename: str):
     extensions = {".parquet", ".parq"} | {
         ParquetFormatter.default_extension,
     }
+    extensions = tuple(ext for ext in extensions if ext is not None)
 
-    return filename.endswith(tuple(extensions))
+    return filename.endswith(extensions)
 
 
 def build_argparser():
@@ -144,7 +145,7 @@ def main():
         for band in injection_catalog_schema:
             injection_catalogs.append((injection_catalog, band))
 
-    writeable_butler = Butler(args.butler_config, writeable=True)
+    writeable_butler = Butler.from_config(args.butler_config, writeable=True)
     injection_catalog_format = vars(args).get("format", None)
 
     injection_catalogs_table = Table(rows=injection_catalogs, names=("injection_catalog", "band"))

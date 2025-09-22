@@ -531,7 +531,7 @@ def add_noise_to_galsim_image(
     image_template : `galsim.Image`
         The image with noise added.
     var_template : `galsim.Image`
-        The estimated variance, adjusted in reponse to the added noise.
+        The estimated variance, adjusted in response to the added noise.
     """
     noise_template = var_template.copy()
     negative_variance = var_template.array < 0

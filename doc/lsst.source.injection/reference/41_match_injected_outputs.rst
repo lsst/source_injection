@@ -9,7 +9,7 @@
 -------------------------------------------------
 
 This page covers how to match injected input catalogs to output data catalogs.
-This process can generally be split into two parts: consoliding per-patch injected catalogs into tract-level input catalogs, and matching the input and output catalogs.
+This process can generally be split into two parts: consolidating per-patch injected catalogs into tract-level input catalogs, and matching the input and output catalogs.
 
 Consolidate injected catalogs
 =============================
@@ -49,7 +49,7 @@ Matching
 Now that we have our consolidated tract-level injected catalog and a reference tract-level standard catalog, we can move on to matching these two sets of catalogs together.
 
 The matching tasks are ``MatchTractCatalogTask`` and ``DiffMatchedTractCatalogTask``.
-The first task performs a spatial probablistic match with minimal flag cuts, and the second computes any relevant statistics.
+The first task performs a spatial probabilistic match with minimal flag cuts, and the second computes any relevant statistics.
 These tasks are located in the ``pipelines/match_injected_tract_catalog.yaml`` pipeline definition file, with the labels ``match_object_to_injected`` and ``compare_object_to_injected``.
 The pipeline graph for the consolidation and matching process is shown below:
 

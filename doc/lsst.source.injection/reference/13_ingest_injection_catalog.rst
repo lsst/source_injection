@@ -97,7 +97,7 @@ For example, the snippet below ingests the ``my_injection_catalog`` object into 
 
 .. caution::
 
-    Be careful when utilizing a writeable Butler, as edits to the data repository can inadvertantly be made.
+    Be careful when utilizing a writeable Butler, as edits to the data repository can inadvertently be made.
 
 If successful, a list of dataset reference IDs will be returned, one per HTM7 trixel that the input catalog spans.
 The output dataset type name will be ``injection_catalog`` by default (and convention), but this can be overridden by setting the ``dataset_type_name`` argument if so desired.

@@ -714,9 +714,9 @@ class ConsolidateInjectedCatalogsConfig(  # type: ignore [call-arg]
     ):
         """Set isPrimary and related flags on sources.
 
-        For coadded imaging, the `isPrimary` flag returns True when an object
+        For co-added imaging, the `isPrimary` flag returns True when an object
         has no children, is in the inner region of a coadd patch, is in the
-        inner region of a coadd trach, and is not detected in a pseudo-filter
+        inner region of a coadd tract, and is not detected in a pseudo-filter
         (e.g., a sky_object).
         For single frame imaging, the isPrimary flag returns True when a
         source has no children and is not a sky source.

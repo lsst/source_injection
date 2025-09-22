@@ -43,7 +43,7 @@ from lsst.source.injection.utils.test_utils import (
     make_test_injection_catalog,
     make_test_reference_pipeline,
 )
-from lsst.utils.tests import MemoryTestCase, TestCase
+from lsst.utils.tests import TestCase
 
 TEST_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -259,7 +259,7 @@ class SourceInjectionUtilsTestCase(TestCase):
         self.assertEqual(sum(output_catalog["injected_isPrimary"]), 17)
 
 
-class MemoryTestCase(MemoryTestCase):
+class MemoryTestCase(lsst.utils.tests.MemoryTestCase):
     """Test memory usage of functions in this script."""
 
     pass

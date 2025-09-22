@@ -13,7 +13,7 @@ The injected image is a copy of the original image with the injected sources add
 The injected catalog is a catalog of the injected sources, with the same schema as the original catalog and additional columns describing source injection outcomes.
 
 There are multiple ways to visualize injected output imaging.
-The examples on this page make use of the official `lsst.afw.display` tools for visualization, but other standard vizualization tools can also be used, such as those in `astropy.visualization`.
+The examples on this page make use of the official `lsst.afw.display` tools for visualization, but other standard visualization tools can also be used, such as those in `astropy.visualization`.
 
 .. _lsst.source.injection-ref-inspect-image:
 

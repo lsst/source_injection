@@ -56,7 +56,7 @@ Units
 -----
 
 By default, units are assumed to be those expected by `GalSim <https://galsim-developers.github.io/GalSim/_build/html/sb.html>`_.
-Typically, this will be units of pixels for simple profile length measures, arcseconds for astropyhysical length measures (such as the Sérsic profile) and degrees for angle measures.
+Typically, this will be units of pixels for simple profile length measures, arcseconds for astrophysical length measures (such as the Sérsic profile) and degrees for angle measures.
 Exceptions to this are special parameters reserved for use by this package (see :ref:`lsst.source.injection-ref-generate-catalog-parameters` below for more details) such as ``mag``, which is in units of AB magnitude.
 
 To specify a parameter in units other than those expected by GalSim, values may be multiplied by an astropy unit object when working in Python (this cannot be achieved from the command line).
@@ -174,7 +174,7 @@ More information on the arguments accepted by this script may be found by runnin
     generate_injection_catalog --help
 
 The example below generates a synthetic source injection catalog with sources randomly scattered in the range 149.7 < RA < 150.1 and 2.0 < Dec < 2.4, with 3 repeats of each unique combination of profile parameters.
-Additional paramters describing a series of Sérsic sources are also specified (see above for more details).
+Additional parameters describing a series of Sérsic sources are also specified (see above for more details).
 
 .. code-block:: shell
 
@@ -274,7 +274,7 @@ More information on the operation of this function may be obtained by calling ``
 
 As an example in Python, the snippet below creates a source injection catalog with synthetic Sérsic sources quasi-randomly scattered in the range 149.7 < RA < 150.1 and 2.0 < Dec < 2.4 (see :ref:`this note for more information on this choice of limits<skylimits>`).
 Source combinations consist of three distinct magnitudes, three distinct Sérsic indices and two distinct half light radii.
-Three repeates of each unique combination of profile parameters are generated.
+Three repeats of each unique combination of profile parameters are generated.
 
 .. code-block:: python
 

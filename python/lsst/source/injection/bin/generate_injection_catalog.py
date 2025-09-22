@@ -252,7 +252,7 @@ def main():
         wcs = None
         logger.info("No WCS provided, source positions generated using Cartesian geometry.")
     else:
-        butler = Butler(butler_config)
+        butler = Butler.from_config(butler_config)
         where = vars(args).get("where", "")  # Optional where query.
         try:
             dataset_ref = list(
@@ -297,7 +297,7 @@ def main():
 
     # Ingest table into a butler repo.
     if injection_band:
-        writeable_butler = Butler(butler_config, writeable=True)
+        writeable_butler = Butler.from_config(butler_config, writeable=True)
         for band in injection_band:
             _ = ingest_injection_catalog(
                 writeable_butler=writeable_butler,

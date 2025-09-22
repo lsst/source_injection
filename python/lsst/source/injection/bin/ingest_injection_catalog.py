@@ -46,8 +46,9 @@ def _is_parquet(filename: str):
     extensions = {".parquet", ".parq"} | {
         ParquetFormatter.default_extension,
     }
+    extensions = tuple(ext for ext in extensions if ext is not None)
 
-    return filename.endswith(tuple(extensions))
+    return filename.endswith(extensions)
 
 
 def build_argparser():

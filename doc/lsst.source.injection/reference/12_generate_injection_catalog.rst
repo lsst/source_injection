@@ -119,6 +119,8 @@ The `source_injection` package additionally provides these extra custom classes:
     * - ``Star``
       - A convenient alias for the GalSim `DeltaFunction <https://galsim-developers.github.io/GalSim/_build/html/simple.html#delta-function>`_ class.
 
+To see a full list of supported GalSim surface brightness profile types and their allowed parameters, call the :doc:`show_source_types <../scripts/show_source_types>` command line script.
+
 .. _lsst.source.injection-ref-generate-catalog-galsim:
 
 Common GalSim Parameters

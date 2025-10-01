@@ -19,13 +19,13 @@ Ingest an Injection Catalog on the Command Line
 ===============================================
 
 The :doc:`ingest_injection_catalog <../scripts/ingest_injection_catalog>` tool is used to ingest an injection catalog into a data repository from the command line.
-For example, to ingest the catalog ``my_injection_catalog.csv`` into the ``u/$USER/my_injection_inputs`` RUN collection in the ``$REPO`` repository, associating this catalog with the ``g`` band, run:
+For example, to ingest the catalog ``my_injection_catalog.csv`` into the ``u/$USER/my_injection_inputs`` RUN collection in the ``$REPO`` repository, associating this catalog with the ``r`` band, run:
 
 .. code-block:: bash
 
     ingest_injection_catalog \
     -b $REPO \
-    -i my_injection_catalog.csv g \
+    -i my_injection_catalog.csv r \
     -o u/$USER/my_injection_inputs
 
 *where*
@@ -36,11 +36,11 @@ For example, to ingest the catalog ``my_injection_catalog.csv`` into the ``u/$US
     `$USER`
         The user's username.
 
-If successful,  the tool will print a message similar to:
+If successful, the tool will print a message similar to:
 
 .. code-block:: bash
 
-    Ingested 3 g band injection_catalog DatasetRefs into the butler.
+    Ingested 3 r-band injection_catalog DatasetRefs into: u/$USER/scratch/my_injection_inputs
 
 In this example, the right ascension and declination values in the input catalog fall across three HTM7 trixels, resulting in three datasets being ingested.
 
@@ -69,7 +69,7 @@ The :py:func:`~lsst.source.injection.ingest_injection_catalog` Python function i
 
 More information on the operation of this function may be obtained by calling ``ingest_injection_catalog?`` in a Python interpreter.
 
-For example, the snippet below ingests the ``my_injection_catalog`` object into a writeable data butler, associating this catalog with the ``g`` band, and storing the resulting dataset in the ``u/$USER/my_injection_inputs`` RUN collection:
+For example, the snippet below ingests the ``my_injection_catalog`` object into a writeable data butler, associating this catalog with the ``r`` band, and storing the resulting dataset in the ``u/$USER/my_injection_inputs`` RUN collection:
 
 .. code-block:: python
 
@@ -80,13 +80,13 @@ For example, the snippet below ingests the ``my_injection_catalog`` object into 
     user = os.getenv("USER")
 
     # Instantiate a writeable Butler.
-    writeable_butler = Butler(REPO, writeable=True)
+    writeable_butler = Butler.from_config(REPO, writeable=True)
 
     # Ingest the injection catalog.
     my_injected_datasetRefs = ingest_injection_catalog(
         writeable_butler=writeable_butler,
         table=my_injection_catalog,
-        band="g",
+        band="r",
         output_collection=f"u/{user}/my_injection_inputs",
     )
 

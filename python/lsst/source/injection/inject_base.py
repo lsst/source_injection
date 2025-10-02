@@ -415,7 +415,7 @@ class BaseInjectTask(PipelineTask):
         self.config = cast(BaseInjectConfig, self.config)
 
         # Generate injection IDs (if not provided) and injection flag column.
-        injection_data = vstack(injection_catalogs)
+        injection_data = vstack(injection_catalogs, metadata_conflicts="silent")
         if "injection_id" in injection_data.columns:
             injection_id = injection_data["injection_id"]
             injection_data.remove_column("injection_id")

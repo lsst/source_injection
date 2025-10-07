@@ -33,6 +33,7 @@ from astropy.table import Table, hstack, vstack
 from astropy.units import Quantity, UnitConversionError
 
 from lsst.afw.image.exposure.exposureUtils import bbox_contains_sky_coords
+from lsst.geom import Point2D
 from lsst.pex.config import ChoiceField, Field, ListField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connectionTypes import PrerequisiteInput
@@ -244,8 +245,15 @@ class BaseInjectTask(PipelineTask):
             if self.config.process_all_data_ids:
                 injection_catalogs = [Table(names=["ra", "dec", "source_type"])]
             else:
+                corners = [Point2D(x) for x in input_exposure.getBBox().getCorners()]
+                coords = wcs.pixelToSky(corners)
+                ras = [x.getRa().asDegrees() for x in coords]
+                decs = [x.getDec().asDegrees() for x in coords]
                 raise RuntimeError(
-                    "No injection sources overlap the data query. Check injection catalog coverage."
+                    "No injection sources overlap the region bounded by "
+                    f"{np.min(ras):.2f} <= RA < {np.max(ras):.2f}, "
+                    f"{np.min(decs):.2f} <= Dec < {np.max(decs):.2f} (degrees). "
+                    "Check injection catalog coverage."
                 )
 
         # Consolidate injection catalogs and compose main injection catalog.

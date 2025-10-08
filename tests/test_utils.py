@@ -117,7 +117,7 @@ class SourceInjectionUtilsTestCase(TestCase):
 
         # Merge the injection pipeline into the main reference pipeline.
         merged_pipeline = make_injection_pipeline(
-            dataset_type_name="postISRCCD",
+            dataset_type_name="postISRCCD",  # Unchanged to match task default
             reference_pipeline=self.reference_pipeline,
             injection_pipeline=injection_pipeline,
             exclude_subsets=False,
@@ -175,7 +175,7 @@ class SourceInjectionUtilsTestCase(TestCase):
 
     def test_consolidate_injected_catalogs(self):
         catalog_dict = {"g": self.injected_catalog, "r": self.injected_catalog}
-        output_catalog = self.consolidate_injected_config.consolidate_deepCoadd(
+        output_catalog = self.consolidate_injected_config.consolidate_catalogs(
             catalog_dict=catalog_dict,
             skymap=self.skyMap,
             tract=9,

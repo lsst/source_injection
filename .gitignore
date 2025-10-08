@@ -22,3 +22,4 @@ pytest_session.txt
 .pytest_cache
 .coverage
 python/*.dist-info/
+tests/tmp*

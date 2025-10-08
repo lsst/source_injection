@@ -133,7 +133,7 @@ def make_test_reference_pipeline():
     char_inp = "characterizeImage.connections.ConnectionsClass(config=characterizeImage).exposure.name"
     char_out = "characterizeImage.connections.ConnectionsClass(config=characterizeImage).characterized.name"
     calib_inp = "calibrate.connections.ConnectionsClass(config=calibrate).exposure.name"
-    # When injecting into a postISRCCD, contract1 should be violated.
+    # When injecting into a post_isr_image, contract1 should be violated.
     # The make_injection_pipeline utility should be robust to this.
     contract1 = ContractIR(
         contract=f"{isr_out} == {char_inp}",

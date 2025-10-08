@@ -30,25 +30,25 @@ from .inject_visit import VisitInjectConfig, VisitInjectConnections, VisitInject
 
 class ExposureInjectConnections(  # type: ignore [call-arg]
     VisitInjectConnections,
-    dimensions=("instrument", "visit", "detector"),
+    dimensions=("instrument", "exposure", "detector"),
 ):
     """Exposure-level connections for source injection tasks."""
 
     input_exposure = Input(
         doc="Exposure to inject synthetic sources into.",
-        name="postISRCCD",
+        name="post_isr_image",
         storageClass="Exposure",
         dimensions=("instrument", "exposure", "detector"),
     )
     output_exposure = Output(
         doc="Injected Exposure.",
-        name="{injected_prefix}postISRCCD",
+        name="{injected_prefix}post_isr_image",
         storageClass="Exposure",
         dimensions=("instrument", "exposure", "detector"),
     )
     output_catalog = Output(
         doc="Catalog of injected sources.",
-        name="{injected_prefix}postISRCCD_catalog",
+        name="{injected_prefix}post_isr_image_catalog",
         storageClass="ArrowAstropy",
         dimensions=("instrument", "exposure", "detector"),
     )

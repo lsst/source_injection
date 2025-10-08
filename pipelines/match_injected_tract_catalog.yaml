@@ -1,11 +1,11 @@
-description: Match tract-level injected_deepCoadd_catalog datasets to injected_objectTable_tract datasets.
+description: Match tract-level injected coadd catalogs to injected object table datasets.
 tasks:
-  consolidate_injected_catalogs:
+  consolidateInjectedCatalogs:
     class: lsst.source.injection.utils.ConsolidateInjectedCatalogsTask
-  match_object_to_injected:
+  matchObjectToInjected:
     class: lsst.pipe.tasks.match_tract_catalog.MatchTractCatalogTask
     config:
-      connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
+      connections.name_input_cat_ref: injected_deep_coadd_predetection_catalog_tract
       connections.name_input_cat_target: injected_objectTable_tract
       match_tract_catalog.column_ref_order: i_mag
       match_tract_catalog.columns_ref_meas: ["ra", "dec"]
@@ -23,10 +23,10 @@ tasks:
         from lsst.pipe.tasks.match_tract_catalog_probabilistic import MatchTractCatalogProbabilisticTask
 
         config.match_tract_catalog.retarget(MatchTractCatalogProbabilisticTask)
-  compare_object_to_injected:
+  compareObjectToInjected:
     class: lsst.pipe.tasks.diff_matched_tract_catalog.DiffMatchedTractCatalogTask
     config:
-      connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
+      connections.name_input_cat_ref: injected_deep_coadd_predetection_catalog_tract
       connections.name_input_cat_target: injected_objectTable_tract
       column_matched_prefix_ref: "ref_"
       # TODO: Remove as part of DM-44139

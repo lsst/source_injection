@@ -23,19 +23,19 @@ tasks:
       match_tract_catalog.columns_target_select_false: ["merge_peak_sky"]
       match_tract_catalog.match_n_finite_min: 2
       match_tract_catalog.order_ascending: true
+      output_matched_catalog: true
+
+      diff_matched_catalog.column_matched_prefix_ref: "ref_"
+      diff_matched_catalog.columns_target_coord_err: ["coord_raErr", "coord_decErr"]
+      diff_matched_catalog.columns_ref_copy: columns_ref_copy
+      diff_matched_catalog.columns_target_copy: columns_target_copy
+      diff_matched_catalog.include_unmatched: true
+
       python: |
         from lsst.pipe.tasks.match_tract_catalog_probabilistic import MatchTractCatalogProbabilisticTask
 
         config.match_tract_catalog.retarget(MatchTractCatalogProbabilisticTask)
-  compare_object_to_injected:
-    class: lsst.pipe.tasks.diff_matched_tract_catalog.DiffMatchedTractCatalogTask
-    config:
-      connections.name_input_cat_ref: injected_deepCoadd_catalog_tract
-      connections.name_input_cat_target: injected_objectTable_tract
-      column_matched_prefix_ref: "ref_"
-      columns_target_coord_err: ["coord_raErr", "coord_decErr"]
-      include_unmatched: true
-      python: |
+
         columns_ref_mag_to_nJy = {}
         columns_ref_copy = [
           "injected_id", parameters.source_type_column, "injection_flag",
@@ -75,6 +75,4 @@ tasks:
             "sersic_unknown_flag", "sersic_no_data_flag",
           ])
         # TODO: Remove as part of DM-44139
-        config.columns_ref_mag_to_nJy = columns_ref_mag_to_nJy
-        config.columns_ref_copy = columns_ref_copy
-        config.columns_target_copy = columns_target_copy
+        config.diff_matched_catalog.columns_ref_mag_to_nJy = columns_ref_mag_to_nJy

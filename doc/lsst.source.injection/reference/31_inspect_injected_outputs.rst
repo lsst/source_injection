@@ -27,16 +27,16 @@ First, in Python, lets load an example ``injected_postISRCCD`` image produced in
     from lsst.daf.butler import Butler
 
     # Instantiate a butler.
-    butler = Butler(REPO)
+    butler = Butler.from_config(REPO)
 
     # Load an injected_postISRCCD image.
     dataId = dict(
-        instrument="HSC",
-        exposure=1228,
-        detector=51,
+        instrument="LSSTCam",
+        exposure=2025050300351,
+        detector=94,
     )
-    injected_postISRCCD = butler.get(
-        "injected_postISRCCD",
+    injected_exposure = butler.get(
+        "injected_post_isr_image",
         dataId=dataId,
         collections=OUTPUT_COLL,
     )
@@ -54,42 +54,42 @@ Next lets set up the display, using `matplotlib` as our backend, and display the
 .. code-block:: python
 
     import matplotlib.pyplot as plt
-    from lsst.afw.display import getDisplay, setDefaultBackend
+    from lsst.afw.display import delAllDisplays, getDisplay, setDefaultBackend
 
     # Set matplotlib as the default backend.
     setDefaultBackend("matplotlib")
 
     # Create a figure and a display.
-    fig, ax = plt.subplots(figsize=(6,8))
-    display = getDisplay(frame=fig, reopenPlot=True)
+    delAllDisplays()
+    fig = plt.figure(figsize=(6, 8), dpi=300)
+    display = getDisplay(frame=fig)
 
-    # Display the injected_postISRCCD image.
-    display.mtv(injected_postISRCCD)
+    # Display the injected_exposure image.
+    display.mtv(injected_exposure)
 
 Running the above returns something similar to the following:
 
-.. figure:: ../_assets/e1228d51_ref_inspect_1.png
-    :name: e1228d51_ref_inspect_1
-    :alt: Injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+.. figure:: ../_assets/e2025050300351d94_ref_inspect_1.png
+    :name: e2025050300351d94_ref_inspect_1
+    :alt: Injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     :align: center
     :width: 100%
 
     ..
 
-    Injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+    Injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     Image is scaled using default `~lsst.afw.display.Display.mtv` scaling, with semi-transparent mask planes overlaid.
 
 A number of mask planes of varying color are displayed above.
-We can examine the `mask` attribute for the ``injected_postISRCCD`` to determine what each color represents:
-
+We can examine the `mask` attribute for the ``injected_post_isr_image`` to determine what each color represents:
 .. code-block:: python
 
     # Sort the mask plane dict by bit value and print their mask plane color.
-    mask_plane_dict = injected_postISRCCD.mask.getMaskPlaneDict()
+    mask_plane_dict = injected_exposure.mask.getMaskPlaneDict()
     sorted_mask_plane_dict = dict(
         sorted(
             mask_plane_dict.items(),
-            key=lambda item: item[1]
+            key=lambda item: item[1],
         )
     )
     max_key_length = max(map(len, sorted_mask_plane_dict.keys()))
@@ -109,11 +109,14 @@ The above returns something similar to:
     DETECTED_NEGATIVE : cyan
     SUSPECT           : yellow
     NO_DATA           : orange
-    CROSSTALK         : red
-    INJECTED          : green
-    INJECTED_CORE     : blue
-    NOT_DEBLENDED     : cyan
-    UNMASKEDNAN       : magenta
+    VIGNETTED         : red
+    STREAK            : green
+    CROSSTALK         : blue
+    INJECTED          : cyan
+    INJECTED_CORE     : magenta
+    ITL_DIP           : yellow
+    PARTLY_VIGNETTED  : orange
+    UNMASKEDNAN       : red
 
 .. note::
 
@@ -135,79 +138,81 @@ For example, lets mask all mask planes except the INJECTED mask plane, and lets 
 .. code-block:: python
 
     # Create a figure and a display.
-    fig, ax = plt.subplots(figsize=(6, 8))
-    display = getDisplay(frame=fig, reopenPlot=True)
+    delAllDisplays()
+    fig = plt.figure(figsize=(6, 8), dpi=300)
+    display = getDisplay(frame=fig)
 
     # Hide all mask planes except INJECTED, using asinh zscale image scaling.
     display.setMaskTransparency(100)
     display.setMaskTransparency(60, name="INJECTED")
     display.scale("asinh", "zscale")
 
-    # Display the injected_postISRCCD image.
-    display.mtv(injected_postISRCCD)
+    # Display the injected_post_isr_image data.
+    display.mtv(injected_exposure)
 
 The snippet above returns something similar to:
 
-.. figure:: ../_assets/e1228d51_ref_inspect_2.png
-    :name: e1228d51_ref_inspect_2
-    :alt: Injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+.. figure:: ../_assets/e2025050300351d94_ref_inspect_2.png
+    :name: e2025050300351d94_ref_inspect_2
+    :alt: Injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     :align: center
     :width: 100%
 
     ..
 
-    Injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+    Injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     Image is `asinh` `zscale` scaled, with the ``INJECTED`` mask plane shown overlaid.
 
-We can also optionally zoom in to a specific coordinate and highlight the ``INJECTED_CORE`` mask plane as well:
+We can also optionally zoom in to a specific coordinate and highlight the ``INJECTED_CORE`` mask plane instead:
 
 .. code-block:: python
 
     # Create a figure and a display.
-    fig, ax = plt.subplots(figsize=(6, 8))
-    display = getDisplay(frame=fig, reopenPlot=True)
+    delAllDisplays()
+    fig = plt.figure(figsize=(6, 8), dpi=300)
+    display = getDisplay(frame=fig)
 
-    # Show only INJECTED/INJECTED_CORE mask planes, using asinh zscale scaling.
+    # Show only the INJECTED_CORE mask plane, using asinh zscale scaling.
     display.setMaskTransparency(100)
-    display.setMaskTransparency(60, name="INJECTED")
     display.setMaskTransparency(60, name="INJECTED_CORE")
     display.scale("asinh", "zscale")
 
-    # Display the injected_postISRCCD image and zoom in on [1237, 3066].
-    display.mtv(injected_postISRCCD)
-    display.zoom(10, 1237, 3066)
+    # Display the injected_post_isr_image data and zoom in on [1250, 2950].
+    display.mtv(injected_exposure)
+    display.zoom(10, 1250, 2950)
 
 The modified snippet above returns something similar to:
 
-.. figure:: ../_assets/e1228d51_ref_inspect_3.png
-    :name: e1228d51_ref_inspect_3
-    :alt: A zoomed in section of an injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+.. figure:: ../_assets/e2025050300351d94_ref_inspect_3.png
+    :name: e2025050300351d94_ref_inspect_3
+    :alt: A zoomed in section of an injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     :align: center
     :width: 100%
 
     ..
 
-    A zoomed in section of an injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
-    Image is `asinh` `zscale` scaled, with the ``INJECTED`` (green) and ``INJECTED_CORE`` (blue) mask planes overlaid.
+    A zoomed in section of an injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
+    Image is `asinh` `zscale` scaled, with the ``INJECTED_CORE`` (magenta) mask plane overlaid.
 
 A difference image can be constructed by subtracting the original image from the injected image:
 
 .. code-block:: python
 
-    # Load the original postISRCCD image with the butler.
-    postISRCCD = butler.get(
-        "postISRCCD",
+    # Load the original post_isr_image data with the butler.
+    input_exposure = butler.get(
+        "post_isr_image",
         dataId=dataId,
         collections=OUTPUT_COLL,
     )
 
     # Subtract the original image from the injected image.
-    injected_diff = injected_postISRCCD.clone()
-    injected_diff.image.array = injected_postISRCCD.image.array - postISRCCD.image.array
+    injected_diff = injected_exposure.clone()
+    injected_diff.image.array = injected_exposure.image.array - input_exposure.image.array
 
     # Create a figure and a display.
-    fig, ax = plt.subplots(figsize=(6, 8))
-    display = getDisplay(frame=fig, reopenPlot=True)
+    delAllDisplays()
+    fig = plt.figure(figsize=(6, 8), dpi=300)
+    display = getDisplay(frame=fig)
 
     # Hide all mask planes, and use asinh zscale scaling.
     display.setMaskTransparency(100)
@@ -223,15 +228,15 @@ A difference image can be constructed by subtracting the original image from the
 
 The difference image snippet above returns:
 
-.. figure:: ../_assets/e1228d51_ref_inspect_4.png
-    :name: e1228d51_ref_inspect_4
-    :alt: An image showing the difference between an injected post-ISR CCD (``injected_postISRCCD``) and a standard post-ISR CCD (``postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+.. figure:: ../_assets/e2025050300351d94_ref_inspect_4.png
+    :name: e2025050300351d94_ref_inspect_4
+    :alt: An image showing the difference between an injected post-ISR image (``injected_post_isr_image``) and a standard post-ISR image (``post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     :align: center
     :width: 100%
 
     ..
 
-    An image showing the difference between an injected post-ISR CCD (``injected_postISRCCD``) and a standard post-ISR CCD (``postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
+    An image showing the difference between an injected post-ISR image (``injected_post_isr_image``) and a standard post-ISR image (``post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
     Image is `asinh` `zscale` scaled.
 
 .. _lsst.source.injection-ref-inspect-catalog:
@@ -240,27 +245,26 @@ Examine an Injected Catalog
 ===========================
 
 The source detection task also outputs an injected catalog.
-The catalog is named in line with the injected image; for example, an injection into a ``postISRCCD`` produces an ``injected_postISRCCD`` and an ``injected_postISRCCD_catalog``.
+The catalog is named in line with the injected image; for example, an injection into a ``post_isr_image`` produces an ``injected_post_isr_image`` and an ``injected_post_isr_image_catalog``.
 
 The injected catalog has the same schema as the original catalog, with additional columns providing injection flag information and the draw size (in pixels) associated with the injected source.
 
-The example below loads the associated ``injected_postISRCCD_catalog`` for the ``injected_postISRCCD`` from above:
-
+The example below loads the associated ``injected_post_isr_image_catalog`` for the ``injected_post_isr_image`` from above:
 .. code-block:: python
 
     from lsst.daf.butler import Butler
 
     # Instantiate a butler.
-    butler = Butler(REPO)
+    butler = Butler.from_config(REPO)
 
-    # Load an injected_postISRCCD image.
+    # Load an injected_post_isr_image catalog.
     dataId = dict(
-        instrument="HSC",
-        exposure=1228,
-        detector=51,
+        instrument="LSSTCam",
+        exposure=2025050300351,
+        detector=94,
     )
-    injected_postISRCCD_catalog = butler.get(
-        "injected_postISRCCD_catalog",
+    injected_catalog = butler.get(
+        "injected_post_isr_image_catalog",
         dataId=dataId,
         collections=OUTPUT_COLL,
     )
@@ -277,14 +281,13 @@ For this example, this catalog looks like this:
 
 .. code-block:: python
 
-    injection_id injection_flag injection_draw_size         ra                dec         source_type mag   n  half_light_radius
-    ------------ -------------- ------------------- ------------------ ------------------ ----------- ---- --- -----------------
-               0              0                 268  149.8402465482284 2.2102027405735303      Sersic 15.0 1.0               5.0
-              42              0                1504 149.76524921034587  2.150907661348014      Sersic 15.0 4.0               5.0
-              70              0                 536  149.7464875946779 2.1755984611156305      Sersic 17.0 1.0              10.0
-              81              0                 538 149.82148074871415  2.249712897755423      Sersic 17.0 2.0               5.0
-             142              0                 542 149.75897021350687  2.234875155713459      Sersic 19.0 2.0               5.0
-             152              0                1078 149.77773402454838  2.205244886929932      Sersic 19.0 2.0              10.0
+    injection_id injection_flag injection_draw_size         ra                dec         source_type mag   n  half_light_radius  q   beta
+    ------------ -------------- ------------------- ------------------ ------------------ ----------- ---- --- ----------------- --- -----
+              62              0                 628 185.74127141535553 5.4419263523057895      Sersic 15.0 1.0              10.0 0.5  25.0
+              92              0                 472 185.74473093775276  5.376572561793999      Sersic 15.0 2.0               5.0 0.9 125.0
+             141              0                1264  185.7223434826212  5.492119251088945      Sersic 15.0 2.0              10.0 0.5  25.0
+             142              0                1264 185.70341406475956  5.538522382978416      Sersic 15.0 2.0              10.0 0.5  25.0
+             171              0                1314 185.74295452997492  5.550850428274257      Sersic 15.0 4.0               5.0 0.9 125.0
 
 This injected catalog may not be a complete copy of the input catalog.
 Only sources which stood any chance of being injected are included in the injected catalog.
@@ -297,7 +300,7 @@ The bit-wise value for all potential flags may be accessed from the metadata att
 .. code-block:: python
 
     # Get injection flags from the metadata; print their label and bit value.
-    injection_flags = injected_postISRCCD_catalog.meta
+    injection_flags = injected_catalog.meta
     max_key_length = max(map(len, injection_flags.keys()))
     for key, value in injection_flags.items():
         print(f"{key: <{max_key_length}} : {value}")
@@ -306,12 +309,12 @@ The snippet above returns:
 
 .. code-block:: python
 
-    MAG_BAD           : 0
-    TYPE_UNKNOWN      : 1
-    SERSIC_EXTREME    : 2
-    NO_OVERLAP        : 3
-    FFT_SIZE_ERROR    : 4
-    PSF_COMPUTE_ERROR : 5
+    MAG_BAD                         : 0
+    TYPE_UNKNOWN                    : 1
+    SERSIC_EXTREME                  : 2
+    NO_OVERLAP                      : 3
+    FFT_SIZE_ERROR                  : 4
+    PSF_COMPUTE_ERROR               : 5
 
 *where*
 
@@ -346,16 +349,15 @@ The injected catalog may be used to overplot the coordinates of injected sources
 .. code-block:: python
 
     from lsst.daf.butler import Butler
-    from lsst.geom import Box2D, SpherePoint, degrees
 
-    # Assuming the injected_postISRCCD/injected_postISRCCD_catalog are loaded.
+    # Assuming the injected data are loaded.
 
     # Get the WCS information from the visit_summary table initially used.
-    butler = Butler(REPO)
+    butler = Butler.from_config(REPO)
     dataId = dict(
-        instrument="HSC",
-        visit=1228,
-        detector=51,
+        instrument="LSSTCam",
+        visit=2025050300351,
+        detector=94,
     )
     visit_summary = butler.get(
         "visit_summary",
@@ -366,26 +368,26 @@ The injected catalog may be used to overplot the coordinates of injected sources
 
     # Get x/y pixel coordinates for injected sources.
     xs, ys = wcs.skyToPixelArray(
-        injected_postISRCCD_catalog["ra"],
-        injected_postISRCCD_catalog["dec"],
-        degrees=True
+        injected_catalog["ra"],
+        injected_catalog["dec"],
+        degrees=True,
     )
 
-    # Create a figure and a display, using WCS information.
-    fig, ax = plt.subplots(figsize=(6, 8))
-    display = getDisplay(frame=fig, reopenPlot=True)
+    # Create a figure and a display.
+    delAllDisplays()
+    fig = plt.figure(figsize=(6, 8), dpi=300)
+    display = getDisplay(frame=fig)
 
-    # Hide all mask planes except INJECTED, using asinh zscale image scaling.
+    # Hide all mask planes, using asinh zscale image scaling.
     display.setMaskTransparency(100)
-    display.setMaskTransparency(60, name="INJECTED")
     display.scale("asinh", "zscale")
 
-    # Display the injected_postISRCCD image.
-    display.mtv(injected_postISRCCD)
+    # Display the injected_post_isr_image data.
+    display.mtv(injected_exposure)
 
     # Overplot injected source centroids.
     with display.Buffering():
-        for (x,y) in zip(xs, ys):
+        for x, y in zip(xs, ys):
             display.dot("o", x, y, size=100, ctype="orange")
 
 *where*
@@ -398,16 +400,16 @@ The injected catalog may be used to overplot the coordinates of injected sources
 
 Running the above snippet returns the following figure:
 
-.. figure:: ../_assets/e1228d51_ref_inspect_5.png
-    :name: e1228d51_ref_inspect_5
-    :alt: Injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`. Injected source centroids are circled in orange.
+.. figure:: ../_assets/e2025050300351d94_ref_inspect_5.png
+    :name: e2025050300351d94_ref_inspect_5
+    :alt: Injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`. Injected source centroids are circled in orange.
     :align: center
     :width: 100%
 
     ..
 
-    Injected post-ISR CCD (``injected_postISRCCD``) for HSC exposure 1228, detector 51, visualized using `lsst.afw.display`.
-    Image is `asinh` `zscale` scaled, with the ``INJECTED`` mask plane shown overlaid.
+    Injected post-ISR image (``injected_post_isr_image``) for LSSTCam exposure 2025050300351, detector 94, visualized using `lsst.afw.display`.
+    Image is `asinh` `zscale` scaled.
     Injected source centroids are circled in orange.
 
 .. _lsst.source.injection-ref-inspect-wrap:

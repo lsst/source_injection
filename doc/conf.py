@@ -5,12 +5,15 @@ For more information, see:
 https://developer.lsst.io/stack/building-single-package-docs.html
 """
 
-from documenteer.conf.pipelinespkg import *  # noqa: F403
+try:
+    from documenteer.conf.pipelinespkg import *  # noqa: F403
 
-project = "source_injection"
-html_theme_options["logotext"] = project  # noqa: F405
-html_title = project
-html_short_title = project
+    project = "source_injection"
+    html_theme_options["logotext"] = project  # noqa: F405
+    html_title = project
+    html_short_title = project
 
-# Update intersphinx configuration to allow finding butler/pipe_base entries.
-intersphinx_mapping["lsst"] = ("https://pipelines.lsst.io/v/daily/", None)  # noqa
+    # Update intersphinx configuration to allow finding butler/pipe_base entries.
+    intersphinx_mapping["lsst"] = ("https://pipelines.lsst.io/v/daily/", None)  # noqa
+except:
+    from documenteer.conf.guide import *  # noqa: F403, import *

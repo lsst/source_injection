@@ -1,0 +1,6 @@
+[project]
+title = "source_injection"
+github_url = "https://github.com/lsst/source_injection"
+
+[build]
+clean = true

@@ -17,7 +17,7 @@ Consolidate injected catalogs
 The butler may split up catalogs which cover multiple photometry bands or which cover large areas of sky for memory efficiency, even when a single catalog is injected.
 For example, if a coadd-level injected catalog covers a whole tract across multiple photometry bands, the injected catalogs will be split and stored with the dimensions ``{patch, band}``.
 Before matching the injected input catalogs to the processed output catalog, the per-patch and per-band inputs must be consolidated into a single tract level catalog.
-This can be done by using ``pipetask run`` to run ``ConsolidateInjectedCatalogsTask`` from ``pipelines/consolidate_injected_deepCoadd_catalogs.yaml``.
+This can be done by using ``pipetask run`` to run ``ConsolidateInjectedCatalogsTask`` from ``pipelines/match_injected_tract_catalog.yaml#consolidate_injected_catalogs``.
 
 .. code::
 
@@ -25,7 +25,7 @@ This can be done by using ``pipetask run`` to run ``ConsolidateInjectedCatalogsT
     -b $REPO \
     -i $PROCESSED_DATA_COLL \
     -o $CONSOLIDATED_CATALOG_COLL \
-    -p $SOURCE_INJECTION_DIR/pipelines/consolidate_injected_deepCoadd_catalogs.yaml \
+    -p $SOURCE_INJECTION_DIR/pipelines/match_injected_tract_catalog.yaml#consolidate_injected_catalogs \
     -d "instrument='HSC' AND skymap='hsc_rings_v1' AND tract=9813 AND patch=42 AND band='i'"
 
 *where*
@@ -118,7 +118,7 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
     # Load the matched catalog with the butler.
     butler = Butler("/sdf/group/rubin/repo/main")
     collections = "u/mccann/DM-41210/RC2"
-    dtype = "matched_injected_deepCoadd_catalog_tract_injected_objectTable_tract"
+    dtype = "matched_injected_deep_coadd_predetection_catalog_tract_injected_objectTable_tract"
     tract = 9813
     dataId = {"skymap":"hsc_rings_v1", "tract":tract}
     data = butler.get(dtype, collections=collections, dataId=dataId)
@@ -183,7 +183,7 @@ The following is an example of a completeness plot using ``matplotlib.pyplot``.
 
 .. figure:: ../_assets/t9813bi_completeness.png
     :name: t9813bi_completeness
-    :alt: Completeness for coadd-level matched injected catalog (``matched_injected_deepCoadd_catalog_tract_injected_objectTable_tract``) for HSC tract 9813, ``i`` band, visualized using `matplotlib.pyplot`.
+    :alt: Completeness for coadd-level matched injected catalog (``matched_injected_deep_coadd_predetection_catalog_tract_injected_objectTable_tract``) for HSC tract 9813, ``i`` band, visualized using `matplotlib.pyplot`.
     :align: center
     :width: 100%
 

@@ -56,7 +56,7 @@ class ConsolidateInjectedCatalogsConnections(
 
     input_catalogs = Input(
         doc="Per-patch and per-band injected catalogs to draw inputs from.",
-        name="{injected_prefix}deepCoadd_catalog",
+        name="{injected_prefix}deep_coadd_predetection_catalog",
         dimensions=("skymap", "tract", "patch", "band"),
         storageClass="ArrowAstropy",
         minimum=1,
@@ -70,7 +70,7 @@ class ConsolidateInjectedCatalogsConnections(
     )
     output_catalog = Output(
         doc="Per-tract multiband catalog of injected sources.",
-        name="{injected_prefix}deepCoadd_catalog_tract",
+        name="{injected_prefix}deep_coadd_predetection_catalog_tract",
         storageClass="ArrowAstropy",
         dimensions=("skymap", "tract"),
     )
@@ -312,7 +312,7 @@ class ConsolidateInjectedCatalogsConfig(  # type: ignore [call-arg]
         default=0.1,
     )
 
-    def consolidate_deepCoadd(
+    def consolidate_catalogs(
         self,
         catalog_dict: dict[str, astropy.table.Table],
         skymap: BaseSkyMap,
@@ -795,7 +795,7 @@ class ConsolidateInjectedCatalogsTask(PipelineTask):
                     A single table containing all information of the separate
                     tables in catalog_dict
         """
-        output_catalog = self.config.consolidate_deepCoadd(
+        output_catalog = self.config.consolidate_catalogs(
             catalog_dict,
             skymap,
             tract,

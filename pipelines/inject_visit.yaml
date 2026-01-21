@@ -1,6 +1,6 @@
 description: Single-frame-level source injection into visit dataset types.
 tasks:
-  inject_visit:
+  injectVisit:
     class: lsst.source.injection.inject_visit.VisitInjectTask
     config:
       external_psf: true

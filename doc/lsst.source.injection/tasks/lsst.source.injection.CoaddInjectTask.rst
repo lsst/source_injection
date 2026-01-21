@@ -19,8 +19,8 @@ The `GalSim`_ software package is used to generate synthetic postage stamps
 .. _GalSim: https://galsim-developers.github.io/GalSim/
 
 As an output, an `injected_` variant of the input dataset type will be created.
-For coadd-level imaging, the default input is a `deepCoadd` dataset type,
-producing an `injected_deepCoadd` output.
+For coadd-level imaging, the default input is a `deep_coadd_predetection`
+dataset type, producing an `injected_deep_coadd_predetection` output.
 
 .. _lsst.source.injection.CoaddInjectTask-summary:
 

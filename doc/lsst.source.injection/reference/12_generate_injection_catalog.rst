@@ -175,59 +175,62 @@ More information on the arguments accepted by this script may be found by runnin
 
     generate_injection_catalog --help
 
-The example below generates a synthetic source injection catalog with sources randomly scattered in the range 149.7 < RA < 150.1 and 2.0 < Dec < 2.4, with 3 repeats of each unique combination of profile parameters.
+The example below generates a synthetic source injection catalog with sources randomly scattered in the range 185.51 < RA < 185.95 and 5.33 < Dec < 5.56.
+We request 3 repeats of each unique combination of profile parameters.
 Additional parameters describing a series of Sérsic sources are also specified (see above for more details).
 
 .. code-block:: shell
 
     generate_injection_catalog \
-    -a 149.7 150.1 \
-    -d 2.0 2.4 \
+    -a 185.51 185.95 \
+    -d 5.33 5.56 \
     -n 3 \
     -p source_type Sersic \
     -p mag 15 17 19 \
     -p n 1 2 4 \
-    -p half_light_radius 5 10
+    -p half_light_radius 5 10 \
+    -p q 0.9 0.5 \
+    -p beta 25 125
 
 .. _skylimits:
 
 .. note::
 
-    The RA and Dec limits above were chosen to fully overlap HSC tract 9813, patch 42; a tract in the COSMOS field.
-    These limits were also designed to overlap with HSC i-band visit 1228, detectors 42, 43, 50, 51, 58 and 59.
+    These limits have been chosen to fully overlap the r-band LSSTCam visit 2025050300351, detector 94 (the central LSSTCam detector).
+    This detector overlaps the LSST cells skymap (``lsst_cells_v1``) in tract 10321, patch 66.
 
-Running the above will generate a catalog containing 54 sources: 18 combinations repeated 3 times, of which the first several lines will look something like this:
+Running the above will generate a catalog containing 216 sources: 72 combinations repeated 3 times, of which the first several lines will look something like this:
 
 .. _catalogsnippet:
 
 .. code-block:: shell
 
-    injection_id         ra                dec         source_type mag   n  half_light_radius
-    ------------ ------------------ ------------------ ----------- ---- --- -----------------
-               0  149.8402947814415  2.210198210586508      Sersic 15.0 1.0               5.0
-               1  150.0277947814415 2.2250130254013225      Sersic 15.0 1.0               5.0
-               2 149.72154478144148 2.3830377167593473      Sersic 15.0 1.0               5.0
-              10 149.72779478144147  2.091679692067989      Sersic 15.0 1.0              10.0
-              11  149.9965447814415 2.2645191982408286      Sersic 15.0 1.0              10.0
-              12 150.09654478144148 2.0571117908334213      Sersic 15.0 1.0              10.0
-              20 149.84654478144148 2.1311858649074953      Sersic 15.0 2.0               5.0
-              21 149.81529478144148  2.284272284660582      Sersic 15.0 2.0               5.0
-              22 149.97779478144147 2.0719266056482364      Sersic 15.0 2.0               5.0
+    injection_id         ra                dec         source_type mag   n  half_light_radius  q   beta
+    ------------ ------------------ ------------------ ----------- ---- --- ----------------- --- -----
+              0 185.82381171782797  5.492993140640494      Sersic 15.0 1.0               5.0 0.9  25.0
+              1 185.55224921782795 5.3566968443441985      Sersic 15.0 1.0               5.0 0.9  25.0
+              2 185.60381171782797  5.339659807307162      Sersic 15.0 1.0               5.0 0.9  25.0
+              10 185.78428046782795 5.4948861447557205      Sersic 15.0 1.0               5.0 0.9 125.0
+              11 185.93209296782794  5.386038408130206      Sersic 15.0 1.0               5.0 0.9 125.0
+              12 185.63474921782796  5.529906720887408      Sersic 15.0 1.0               5.0 0.9 125.0
+              20 185.83412421782796  5.531799725002634      Sersic 15.0 1.0               5.0 0.5  25.0
+              21 185.63303046782795  5.474063099488231      Sersic 15.0 1.0               5.0 0.5  25.0
+              22 185.83928046782796  5.443775033644609      Sersic 15.0 1.0               5.0 0.5  25.0
     ...
 
 **To generate source positions using WCS information** (recommended), you may supply the `-b` (butler data repository), `-w` (WCS dataset type), `-c` (collection to query) and, optionally, the `--where` arguments to the script.
 With these arguments, a lookup to the butler data repository is made to identify a dataset with WCS appropriate for this catalog.
 If these arguments are *not* supplied, source positions will be generated using Cartesian geometry instead.
 
-For example, to use WCS information from a ``deepCoadd_calexp`` dataset from HSC tract 9813, patch 42 in the i-band within the ``HSC/runs/RC2/w_2023_35/DM-40588`` collection, you would add something akin to the following to the above query:
+For example, to use WCS information from a ``deep_coadd`` dataset from LSST tract 10321, patch 66 in the r-band within the ``LSSTCam/runs/DRP/20250501_20250609/w_2025_30/DM-51933`` collection, you would add something akin to the following to the above query:
 
 .. code-block:: shell
 
     ...
     -b $REPO \
-    -w deepCoadd_calexp \
-    -c HSC/runs/RC2/w_2023_35/DM-40588 \
-    --where "instrument='HSC' AND skymap='hsc_rings_v1' AND tract=9813 AND patch=42 AND band='i'"
+    -w deep_coadd \
+    -c LSSTCam/runs/DRP/20250501_20250609/w_2025_30/DM-51933 \
+    --where "instrument='LSSTCam' AND skymap='lsst_cells_v1' AND tract=10321 AND patch=66 AND band='r'"
 
 *where*
 
@@ -274,20 +277,22 @@ The :py:func:`~lsst.source.injection.generate_injection_catalog` Python function
 
 More information on the operation of this function may be obtained by calling ``generate_injection_catalog?`` in a Python interpreter.
 
-As an example in Python, the snippet below creates a source injection catalog with synthetic Sérsic sources quasi-randomly scattered in the range 149.7 < RA < 150.1 and 2.0 < Dec < 2.4 (see :ref:`this note for more information on this choice of limits<skylimits>`).
-Source combinations consist of three distinct magnitudes, three distinct Sérsic indices and two distinct half light radii.
+As an example in Python, the snippet below creates a source injection catalog with synthetic Sérsic sources quasi-randomly scattered in the range 185.51 < RA < 185.95 and 5.33 < Dec < 5.56 (see :ref:`this note for more information on this choice of limits<skylimits>`).
+Source combinations consist of three distinct magnitudes, three distinct Sérsic indices, two distinct half light radii, two distinct axis ratios and two distinct position angles.
 Three repeats of each unique combination of profile parameters are generated.
 
 .. code-block:: python
 
     my_injection_catalog = generate_injection_catalog(
-        ra_lim=[149.7, 150.1],
-        dec_lim=[2.0, 2.4],
+        ra_lim=[185.51, 185.95],
+        dec_lim=[5.33, 5.56],
         number=3,
         source_type="Sersic",
         mag=[15, 17, 19],
         n=[1, 2, 4],
         half_light_radius=[5, 10],
+        q=[0.9, 0.5],
+        beta=[25, 125],
     )
 
 The resulting catalog is an `astropy.table.Table` object, which may be manipulated as desired (see above for :ref:`an example snippet of the resultant catalog<catalogsnippet>`).

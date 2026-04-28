@@ -25,10 +25,110 @@ __all__ = ["make_injection_pipeline"]
 
 import itertools
 import logging
+import warnings
 
-from lsst.analysis.tools.interfaces import AnalysisPipelineTask
-from lsst.pipe.base import LabelSpecifier, Pipeline
+from lsst.pipe.base import LabelSpecifier, Pipeline, PipelineGraph
 from lsst.pipe.base.pipelineIR import ContractError
+
+
+def _infer_injection_pipeline(dataset_type_name: str, logger: logging.Logger) -> str | None:
+    """Infer the injection pipeline from the dataset type name.
+
+    Parameters
+    ----------
+    dataset_type_name : `str`
+        Name of the dataset type being injected into.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
+
+    Returns
+    -------
+    injection_pipeline : `str` | `None`
+        Location of an injection pipeline definition YAML file stub, or None if
+        no suitable injection pipeline could be inferred.
+    """
+    injection_pipeline = None
+    match dataset_type_name:
+        case "postISRCCD" | "post_isr_image":
+            injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
+        case "icExp" | "calexp" | "initial_pvi" | "pvi" | "preliminary_visit_image" | "visit_image":
+            injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
+        case (
+            "deepCoadd"
+            | "deepCoadd_calexp"
+            | "goodSeeingCoadd"
+            | "deep_coadd_predetection"
+            | "deep_coadd"
+            | "deep_coadd_cell_predetection"
+            | "template_coadd"
+        ):
+            injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_coadd.yaml"
+        case _:
+            # Print a warning rather than a raise, as the user may wish to
+            # edit connection names without merging an injection pipeline.
+            logger.warning(
+                "Unable to infer injection pipeline stub from dataset type name '%s' and none was "
+                "provided. No injection pipeline will be merged into the output pipeline.",
+                dataset_type_name,
+            )
+    if injection_pipeline:
+        logger.info(
+            "Injected dataset type '%s' used to infer injection pipeline: %s",
+            dataset_type_name,
+            injection_pipeline,
+        )
+    return injection_pipeline
+
+
+def _merge_injection_pipeline(
+    pipeline: Pipeline,
+    injection_pipeline: Pipeline | str | None,
+    dataset_type_name: str,
+    prefix: str,
+) -> None | str:
+    """Merge an injection pipeline into an existing pipeline.
+
+    Parameters
+    ----------
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to merge the injection pipeline into.
+    injection_pipeline : `~lsst.pipe.base.Pipeline` | `str` | `None`
+        Injection pipeline to merge, or location of an injection pipeline
+        definition YAML file stub. If None, no injection pipeline is merged.
+    dataset_type_name : `str`
+        Name of the dataset type being injected into.
+    prefix : `str`
+        Prefix to prepend to each affected post-injection dataset type name.
+
+    Returns
+    -------
+    injection_task_label : `str` | `None`
+        Label of the injection task, if an injection pipeline was merged, or
+        None if no injection pipeline was merged.
+
+    Notes
+    -----
+    This function modifies the input pipeline in place.
+    """
+    if injection_pipeline is None:
+        return None
+    if isinstance(injection_pipeline, str):
+        injection_pipeline = Pipeline.fromFile(injection_pipeline)
+    if len(injection_pipeline) != 1:
+        raise RuntimeError(
+            f"The injection pipeline contains {len(injection_pipeline)} tasks; only 1 task is allowed."
+        )
+    pipeline.mergePipeline(injection_pipeline)
+
+    injection_task_label = next(iter(injection_pipeline.task_labels))
+    pipeline.addConfigOverride(injection_task_label, "connections.input_exposure", dataset_type_name)
+    pipeline.addConfigOverride(
+        injection_task_label, "connections.output_exposure", prefix + dataset_type_name
+    )
+    pipeline.addConfigOverride(
+        injection_task_label, "connections.output_catalog", prefix + dataset_type_name + "_catalog"
+    )
+    return injection_task_label
 
 
 def _parse_config_override(config_override: str) -> tuple[str, str, str]:
@@ -70,131 +170,82 @@ def _parse_config_override(config_override: str) -> tuple[str, str, str]:
     return label, key, value
 
 
-def make_injection_pipeline(
-    dataset_type_name: str,
-    reference_pipeline: Pipeline | str,
-    injection_pipeline: Pipeline | str | None = None,
-    exclude_subsets: bool = False,
-    excluded_tasks: set[str] | str = {
-        "jointcal",
-        "gbdesAstrometricFit",
-        "fgcmBuildFromIsolatedStars",
-        "fgcmFitCycle",
-        "fgcmOutputProducts",
-    },
-    prefix: str = "injected_",
-    instrument: str | None = None,
-    config: str | list[str] | None = None,
-    additional_pipelines: list[Pipeline] | list[str] | None = None,
-    additional_subset: list[str] | None = None,
-    log_level: int = logging.INFO,
-) -> Pipeline:
-    """Make an expanded source injection pipeline.
-
-    This function takes a reference pipeline definition file in YAML format and
-    prefixes all post-injection dataset type names with the injected prefix. If
-    an optional injection pipeline definition YAML file is also provided, the
-    injection task will be merged into the pipeline.
-
-    Unless explicitly excluded, all subsets from the reference pipeline
-    containing the task which generates the injection dataset type will also be
-    updated to include the injection task. A series of new injected subsets
-    will also be created. These new subsets are copies of existent subsets, but
-    containing only the tasks which are affected by source injection. New
-    injected subsets will be the original subset name with the prefix
-    'injected_' prepended.
-
-    When the injection pipeline is constructed, a check on all existing
-    pipeline contracts is performed. If any contracts are violated, they are
-    removed from the pipeline. A warning is logged for each contract that is
-    removed.
+def _configure_injection_pipeline(
+    pipeline: Pipeline,
+    config: str | list[str],
+    logger: logging.Logger,
+) -> None:
+    """Apply user-supplied config overrides to the pipeline.
 
     Parameters
     ----------
-    dataset_type_name : `str`
-        Name of the dataset type being injected into.
-    reference_pipeline : Pipeline | `str`
-        Location of a reference pipeline definition YAML file.
-    injection_pipeline : Pipeline | `str`, optional
-        Location of an injection pipeline definition YAML file stub. If not
-        provided, an attempt to infer the injection pipeline will be made based
-        on the injected dataset type name.
-    exclude_subsets : `bool`, optional
-        If True, do not update pipeline subsets to include the injection task.
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to apply config overrides to. Pipeline is modified in place.
+    config : `str` | `list` [`str`]
+        Config override(s) to apply, in the format 'label:key=value'.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
+
+    Notes
+    -----
+    This function modifies the input pipeline in place.
+    """
+    if isinstance(config, str):
+        config = [config]
+    for conf in config:
+        config_label, config_key, config_value = _parse_config_override(conf)
+        try:
+            pipeline.addConfigOverride(config_label, config_key, config_value)
+        except LookupError:
+            logger.debug(
+                "Config override '%s' for label '%s' not found in the reference "
+                "pipeline, either due to a typo or the label not existing in "
+                "the reference pipeline.",
+                conf,
+                config_label,
+            )
+
+
+def _remove_excluded_tasks(
+    pipeline: Pipeline,
+    excluded_tasks: set[str] | str,
+    logger: logging.Logger,
+) -> Pipeline:
+    """Remove excluded tasks from the pipeline and any subsets,
+    and remove any empty subsets.
+
+    Parameters
+    ----------
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to remove tasks from. This pipeline is modified in place.
     excluded_tasks : `set` [`str`] | `str`
-        Set or comma-separated string of task labels to exclude from the
-        injection pipeline.
-    prefix : `str`, optional
-        Prefix to prepend to each affected post-injection dataset type name.
-    instrument : `str`, optional
-        Add instrument overrides. Must be a fully qualified class name.
-    config : `str` | `list` [`str`], optional
-        Config override for a task, in the format 'label:key=value'.
-    additional_pipelines: `list`[Pipeline] | `list`[`str`]
-        Location(s) of additional input pipeline definition YAML file(s).
-        Tasks from these additional pipelines will be added to the output
-        injection pipeline.
-    additional_subset: `list`[`str`] | `str`, optional
-        A list of subset definitions in the form
-        "subset_name[:subset_description]".
-        These subsets will be created if they don't already exist.
-        All tasks from additional_pipelines will be added to these subsets.
-    log_level : `int`, optional
-        The log level to use for logging.
+        Task labels to exclude from the injection pipeline.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
 
     Returns
     -------
-    pipeline : `lsst.pipe.base.Pipeline`
-        An expanded source injection pipeline.
+    pipeline : `~lsst.pipe.base.Pipeline`
+        The input pipeline with excluded tasks and empty subsets removed.
     """
-    # Instantiate logger.
-    logger = logging.getLogger(__name__)
-    logger.setLevel(log_level)
-
-    retry_config_overrides = []
-    # Load the pipeline and apply config overrides, if supplied.
-    if isinstance(reference_pipeline, str):
-        pipeline = Pipeline.fromFile(reference_pipeline)
-    else:
-        pipeline = reference_pipeline
-    if config:
-        if isinstance(config, str):
-            config = [config]
-        for conf in config:
-            config_label, config_key, config_value = _parse_config_override(conf)
-            try:
-                pipeline.addConfigOverride(config_label, config_key, config_value)
-            except LookupError:
-                logger.debug(
-                    "Config override '%s' for label '%s' not found in the reference "
-                    "pipeline, either due to a typo or the label not existing in "
-                    "the reference pipeline. Retrying after the injection task is added.",
-                    conf,
-                    config_label,
-                )
-                retry_config_overrides.append([config_label, config_key, config_value])
-
-    # Add an instrument override, if provided.
-    if instrument:
-        pipeline.addInstrument(instrument)
-
-    # Remove all tasks which are not to be included in the injection pipeline.
     if isinstance(excluded_tasks, str):
         excluded_tasks = set(excluded_tasks.split(","))
     all_tasks = set(pipeline.task_labels)
     preserved_tasks = all_tasks - excluded_tasks
-    label_specifier = LabelSpecifier(labels=preserved_tasks)
+
+    preserved_task_labels = LabelSpecifier(labels=preserved_tasks)
     # EDIT mode removes tasks from parent subsets but keeps the subset itself.
-    pipeline = pipeline.subsetFromLabels(label_specifier, pipeline.PipelineSubsetCtrl.EDIT)
-    if len(not_found_tasks := excluded_tasks - all_tasks) > 0:
-        grammar = "Task" if len(not_found_tasks) == 1 else "Tasks"
-        logger.warning(
-            "%s marked for exclusion not found in the reference pipeline: %s.",
+    pipeline = pipeline.subsetFromLabels(preserved_task_labels, pipeline.PipelineSubsetCtrl.EDIT)
+
+    if len(found_tasks := excluded_tasks & all_tasks) > 0:
+        grammar = "task" if len(found_tasks) == 1 else "tasks"
+        logger.info(
+            "%d %s excluded from the output pipeline: %s",
+            len(found_tasks),
             grammar,
-            ", ".join(sorted(not_found_tasks)),
+            ", ".join(sorted(found_tasks)),
         )
 
-    # Check for any empty subsets and remove them.
     removed_subsets = set()
     for subset_label, subset_tasks in pipeline.subsets.items():
         if not subset_tasks:
@@ -209,213 +260,48 @@ def make_injection_pipeline(
             ", ".join(sorted(removed_subsets)),
         )
 
-    # Determine the set of dataset type names affected by source injection.
-    injected_tasks = set()
-    all_connection_type_names = set()
-    injected_types = {dataset_type_name}
-    precursor_injection_task_labels = set()
-    # Loop over all tasks in the pipeline.
-    for task_node in pipeline.to_graph().tasks.values():
-        # Add override for Analysis Tools task outputs (but not inputs).
-        # Connections in Analysis Tools are dynamically assigned, and so are
-        # not able to be modified in the same way as a static connection.
-        # Instead, we add an override to the connections.outputName field.
-        # This field is prepended to all Analysis Tools connections, and so
-        # will prepend the injection prefix to all plot/metric outputs.
-        if isAnalysisPipelineTask := issubclass(task_node.task_class, AnalysisPipelineTask):
-            pipeline.addConfigOverride(
-                task_node.label,
-                "connections.outputName",
-                prefix + task_node.config.connections.outputName,
-            )
+    return pipeline
 
-        input_types = {
-            read_edge.parent_dataset_type_name
-            for read_edge in itertools.chain(task_node.inputs.values(), task_node.init.inputs.values())
-        }
-        output_types = {
-            write_edge.parent_dataset_type_name
-            for write_edge in itertools.chain(task_node.outputs.values(), task_node.init.outputs.values())
-        }
 
-        all_connection_type_names |= input_types | output_types
-        # Identify the precursor task: allows appending inject task to subset.
-        if dataset_type_name in output_types:
-            precursor_injection_task_labels.add(task_node.label)
-        # If the task has any injected dataset type names as inputs, add the
-        # task to a set of tasks touched by injection, and add all of the
-        # outputs of this task to the set of injected types.
-        if len(input_types & injected_types) > 0:
-            injected_tasks |= {task_node.label}
-            injected_types |= output_types
-            # Add the injection prefix to all affected dataset type names.
-            for edge in itertools.chain(
-                task_node.init.inputs.values(),
-                task_node.inputs.values(),
-                task_node.init.outputs.values(),
-                task_node.outputs.values(),
-            ):
-                # Continue if this is an analysis task and edge is an output.
-                if isAnalysisPipelineTask and (
-                    edge in set(task_node.init.outputs.values()) | set(task_node.outputs.values())
-                ):
-                    continue
-                if hasattr(task_node.config.connections.ConnectionsClass, edge.connection_name):
-                    # If the connection type is not dynamic, modify as usual.
-                    if edge.parent_dataset_type_name in injected_types:
-                        pipeline.addConfigOverride(
-                            task_node.label,
-                            "connections." + edge.connection_name,
-                            prefix + edge.dataset_type_name,
-                        )
-                else:
-                    # Add log warning if the connection type is dynamic.
-                    logger.warning(
-                        "Dynamic connection %s in task %s is not supported here. This connection will "
-                        "neither be modified nor merged into the output injection pipeline.",
-                        edge.connection_name,
-                        task_node.label,
-                    )
-    # Raise if the injected dataset type does not exist in the pipeline.
-    if dataset_type_name not in all_connection_type_names:
-        raise RuntimeError(
-            f"Dataset type '{dataset_type_name}' not found in the reference pipeline; "
-            "no connection type edits to be made."
-        )
+def _get_pipeline_graph(pipeline: Pipeline, logger: logging.Logger) -> PipelineGraph:
+    """Get the pipeline graph, handling any contract errors.
 
-    # Attempt to infer the injection pipeline from the dataset type name.
-    if not injection_pipeline:
-        match dataset_type_name:
-            case "postISRCCD" | "post_isr_image":
-                injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_exposure.yaml"
-            case "icExp" | "calexp" | "initial_pvi" | "pvi" | "preliminary_visit_image" | "visit_image":
-                injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_visit.yaml"
-            case (
-                "deepCoadd"
-                | "deepCoadd_calexp"
-                | "goodSeeingCoadd"
-                | "deep_coadd_predetection"
-                | "deep_coadd"
-                | "template_coadd"
-            ):
-                injection_pipeline = "$SOURCE_INJECTION_DIR/pipelines/inject_coadd.yaml"
-            case _:
-                # Print a warning rather than a raise, as the user may wish to
-                # edit connection names without merging an injection pipeline.
-                logger.warning(
-                    "Unable to infer injection pipeline stub from dataset type name '%s' and none was "
-                    "provided. No injection pipeline will be merged into the output pipeline.",
-                    dataset_type_name,
-                )
-        if injection_pipeline:
-            logger.info(
-                "Injected dataset type '%s' used to infer injection pipeline: %s",
-                dataset_type_name,
-                injection_pipeline,
-            )
+    Pipeline contracts that are violated by any modifications made to the
+    pipeline will be removed, with a warning logged for each contract that's
+    removed.
 
-    # Merge the injection pipeline to the modified pipeline, if provided.
-    if injection_pipeline:
-        if isinstance(injection_pipeline, str):
-            injection_pipeline = Pipeline.fromFile(injection_pipeline)
-        if len(injection_pipeline) != 1:
-            raise RuntimeError(
-                f"The injection pipeline contains {len(injection_pipeline)} tasks; only 1 task is allowed."
-            )
-        pipeline.mergePipeline(injection_pipeline)
-        # Loop over all injection tasks and modify the connection names.
-        for injection_task_label in injection_pipeline.task_labels:
-            injected_tasks.add(injection_task_label)
-            pipeline.addConfigOverride(injection_task_label, "connections.input_exposure", dataset_type_name)
-            pipeline.addConfigOverride(
-                injection_task_label, "connections.output_exposure", prefix + dataset_type_name
-            )
-            pipeline.addConfigOverride(
-                injection_task_label, "connections.output_catalog", prefix + dataset_type_name + "_catalog"
-            )
-            # Optionally update subsets to include the injection task.
-            if not exclude_subsets:
-                for label in precursor_injection_task_labels:
-                    precursor_subsets = pipeline.findSubsetsWithLabel(label)
-                    for subset in precursor_subsets:
-                        pipeline.addLabelToSubset(subset, injection_task_label)
-        if retry_config_overrides:
-            # Retry config overrides that were not found in the pipeline before
-            # the injection task was added.
-            for config_label, config_key, config_value in retry_config_overrides:
-                pipeline.addConfigOverride(config_label, config_key, config_value)
+    Parameters
+    ----------
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to validate contracts for.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
 
-    # Create injected subsets.
-    injected_label_specifier = LabelSpecifier(labels=injected_tasks)
-    injected_pipeline = pipeline.subsetFromLabels(injected_label_specifier, pipeline.PipelineSubsetCtrl.EDIT)
-    injected_subset_labels = set()
-    for injected_subset in injected_pipeline.subsets.keys():
-        injected_subset_label = "injected_" + injected_subset
-        injected_subset_description = (
-            "All tasks from the '" + injected_subset + "' subset impacted by source injection."
-        )
-        if len(injected_subset_tasks := injected_pipeline.subsets[injected_subset]) > 0:
-            injected_subset_labels |= {injected_subset_label}
-            pipeline.addLabeledSubset(
-                injected_subset_label, injected_subset_description, injected_subset_tasks
-            )
+    Returns
+    -------
+    pipeline_graph : `~lsst.pipe.base.PipelineGraph`
+        The pipeline graph for the input pipeline, with any violated contracts
+        removed from the input pipeline.
 
-    grammar1 = "task" if len(pipeline) == 1 else "tasks"
-    grammar2 = "subset" if len(injected_subset_labels) == 1 else "subsets"
-    logger.info(
-        "Made an injection pipeline containing %d %s and %d new injected %s.",
-        len(pipeline),
-        grammar1,
-        len(injected_subset_labels),
-        grammar2,
-    )
-
-    # Optionally include additional tasks in the injection pipeline.
-    if additional_pipelines:
-        additional_tasks: set[str] = set()
-        # Record all input task labels and merge all input pipelines into the
-        # injection pipeline.
-        for additional_pipeline in additional_pipelines:
-            if isinstance(additional_pipeline, str):
-                additional_pipeline = Pipeline.fromFile(additional_pipeline)
-            additional_tasks.update(additional_pipeline.task_labels)
-            pipeline.mergePipeline(additional_pipeline)
-
-        # Add all tasks to subset_name. If the subset does not exist create it.
-        if not isinstance(additional_subset, list) and additional_subset is not None:
-            additional_subset = [additional_subset]
-        for subset in additional_subset:
-            if ":" in subset:
-                subset_name, subset_description = subset.split(":", 1)
-            else:
-                subset_name = subset
-                subset_description = ""
-
-            if subset_name in pipeline.subsets.keys():
-                for additional_task in additional_tasks:
-                    pipeline.addLabelToSubset(subset_name, additional_task)
-                    subset_grammar = f"the existing subset {subset_name}"
-            else:
-                pipeline.addLabeledSubset(subset_name, subset_description, additional_tasks)
-                subset_grammar = f"a new subset {subset_name}"
-
-        # Logging info.
-        task_grammar = "task" if len(additional_tasks) == 1 else "tasks"
-        logger.info(
-            "Added %d %s to %s",
-            len(additional_tasks),
-            task_grammar,
-            subset_grammar,
-        )
-
-    # Validate contracts, and remove any that are violated
+    Notes
+    -----
+    This function modifies the input pipeline in place, removing any violated
+    contracts.
+    """
     try:
-        _ = pipeline.to_graph()
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=r".*formatted like a Pipeline parameter but was not found within the Pipeline.*",
+                category=UserWarning,
+            )
+            pipeline_graph = pipeline.to_graph()
     except ContractError:
         contracts_initial = pipeline._pipelineIR.contracts
         pipeline._pipelineIR.contracts = []
         contracts_passed = []
         contracts_failed = []
+
         for contract in contracts_initial:
             pipeline._pipelineIR.contracts = [contract]
             try:
@@ -424,11 +310,274 @@ def make_injection_pipeline(
                 contracts_failed.append(contract)
                 continue
             contracts_passed.append(contract)
+
         pipeline._pipelineIR.contracts = contracts_passed
+        pipeline_graph = pipeline.to_graph()
+
         if contracts_failed:
             logger.warning(
                 "The following contracts were violated and have been removed: \n%s",
                 "\n".join([str(contract) for contract in contracts_failed]),
             )
+    return pipeline_graph
+
+
+def _reconfigure_injection_pipeline(
+    pipeline: Pipeline,
+    dataset_type_name: str,
+    prefix: str,
+    injection_task_label: str | None,
+    update_subsets: bool,
+    logger: logging.Logger,
+) -> None:
+    """Reconfigure the injection pipeline by prefixing post-injection dataset
+    type names and updating subsets.
+
+    Parameters
+    ----------
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to configure. This pipeline is modified in place.
+    dataset_type_name : `str`
+        Name of the dataset type being injected into.
+    prefix : `str`
+        Prefix to prepend to each affected post-injection dataset type name.
+    injection_task_label : `str` | `None`
+        Label of the injection task.
+    update_subsets : `bool`
+        If True, update pipeline subsets to include the injection task.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
+
+    Notes
+    -----
+    This function modifies the input pipeline in place.
+    """
+    # Use pipeline graph to determine tasks with connections to be modified
+    pipeline_graph = _get_pipeline_graph(pipeline, logger)
+    post_injection_tasks = pipeline_graph.consumers_of(dataset_type_name)
+    if len(post_injection_tasks) == 0:
+        logger.warning(
+            "Dataset type '%s' not found in the reference pipeline; no input connection edits to be made.",
+            dataset_type_name,
+        )
+    if post_injection_tasks:
+        post_injection_tasks = [task for task in post_injection_tasks if task.label != injection_task_label]
+    else:
+        post_injection_tasks = []
+
+    # Loop over each post injection task; prefix input connections
+    for task_node in post_injection_tasks:
+        for edge in itertools.chain(task_node.init.inputs.values(), task_node.inputs.values()):
+            if hasattr(task_node.config.connections.ConnectionsClass, edge.connection_name):
+                if edge.parent_dataset_type_name == dataset_type_name:
+                    pipeline.addConfigOverride(
+                        task_node.label,
+                        "connections." + edge.connection_name,
+                        prefix + edge.dataset_type_name,
+                    )
+
+    # Update subsets to include the injection task
+    if (
+        update_subsets
+        and injection_task_label is not None
+        and (pre_injection_task := pipeline_graph.producer_of(dataset_type_name)) is not None
+    ):
+        precursor_subsets = pipeline.findSubsetsWithLabel(pre_injection_task.label)
+        for subset in precursor_subsets:
+            pipeline.addLabelToSubset(subset, injection_task_label)
+
+    grammar = "task" if len(pipeline) == 1 else "tasks"
+    logger.info("Made an injection pipeline containing %d %s.", len(pipeline), grammar)
+
+
+def _add_additional_pipelines(
+    pipeline: Pipeline,
+    additional_pipelines: list[Pipeline] | list[str],
+    additional_subset: list[str] | str | None,
+    logger: logging.Logger,
+) -> None:
+    """Add additional pipelines to the injection pipeline, and optionally add
+    all additional tasks to existing or new subsets.
+
+    Parameters
+    ----------
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to add additional pipelines to. Pipeline is modified in place.
+    additional_pipelines : `list` [`~lsst.pipe.base.Pipeline`] | `list` [`str`]
+        Additional pipelines to merge, or locations of additional pipeline
+        definition YAML file stubs.
+    additional_subset : `list` [`str`] | `str` | `None`
+        A list of subset definitions in the form
+        "subset_name[:subset_description]".
+        These subsets will be created if they don't already exist. All tasks
+        from the additional pipelines will be added to these subsets.
+        If None, additional tasks will not be added to any subsets.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
+
+    Notes
+    -----
+    This function modifies the input pipeline in place.
+    """
+    # Merge all additional pipelines into the main pipeline
+    additional_tasks: set[str] = set()
+    for additional_pipeline in additional_pipelines:
+        if isinstance(additional_pipeline, str):
+            additional_pipeline = Pipeline.fromFile(additional_pipeline)
+        additional_tasks.update(additional_pipeline.task_labels)
+        pipeline.mergePipeline(additional_pipeline)
+
+    # Add all tasks to subset_name; create the subset if it does not exist
+    subset_text = ""
+    if additional_subset is not None:
+        if not isinstance(additional_subset, list):
+            additional_subset = [additional_subset]
+        subset_names_old = []
+        subset_names_new = []
+        for subset in additional_subset:
+            # Parse the subset definition
+            if ":" in subset:
+                subset_name, subset_description = subset.split(":", 1)
+            else:
+                subset_name = subset
+                subset_description = ""
+            # Add or create the subset with all additional tasks
+            if subset_name in pipeline.subsets:
+                subset_names_old.append(subset_name)
+                for additional_task in additional_tasks:
+                    pipeline.addLabelToSubset(subset_name, additional_task)
+            else:
+                subset_names_new.append(subset_name)
+                pipeline.addLabeledSubset(subset_name, subset_description, additional_tasks)
+        if subset_names_old:
+            subset_text += f", and to existing subset{'s' if len(subset_names_old) > 1 else ''} "
+            subset_text += f"{', '.join(sorted(subset_names_old))}"
+        if subset_names_new:
+            subset_text += f", and to new subset{'s' if len(subset_names_new) > 1 else ''} "
+            subset_text += f"{', '.join(sorted(subset_names_new))}"
+
+    # Revalidate the pipeline graph
+    _ = _get_pipeline_graph(pipeline, logger)
+
+    grammar = "task" if len(additional_tasks) == 1 else "tasks"
+    logger.info(
+        "Added %d %s to the pipeline%s: %s",
+        len(additional_tasks),
+        grammar,
+        subset_text,
+        ", ".join(sorted(additional_tasks)),
+    )
+
+
+def make_injection_pipeline(
+    dataset_type_name: str,
+    reference_pipeline: Pipeline | str,
+    injection_pipeline: Pipeline | str | None = None,
+    update_subsets: bool = True,
+    excluded_tasks: set[str] | str = {
+        "jointcal",
+        "gbdesAstrometricFit",
+        "fgcmBuildFromIsolatedStars",
+        "fgcmFitCycle",
+        "fgcmOutputProducts",
+    },
+    prefix: str = "injected_",
+    instrument: str | None = None,
+    config: str | list[str] | None = None,
+    additional_pipelines: list[Pipeline] | list[str] | None = None,
+    additional_subset: list[str] | str | None = None,
+    log_level: int = logging.INFO,
+) -> Pipeline:
+    """Make an expanded source injection pipeline.
+
+    This function takes a reference pipeline definition file and prefixes all
+    immediately post-injection dataset type names with the injected prefix. If
+    an optional injection pipeline definition YAML file is also provided, the
+    injection task will be merged into the pipeline.
+
+    Unless subset updates are explicitly disabled, all subsets from the
+    reference pipeline containing the task which generates the injection
+    dataset type will also be updated to include the injection task.
+
+    When the injection pipeline is constructed, a check on all existing
+    pipeline contracts is performed. If any contracts are violated, they're
+    removed from the pipeline. A warning is logged for each contract that is
+    removed.
+
+    Parameters
+    ----------
+    dataset_type_name : `str`
+        Name of the dataset type being injected into.
+    reference_pipeline : Pipeline | `str`
+        Location of a reference pipeline definition YAML file.
+    injection_pipeline : Pipeline | `str`, optional
+        Location of an injection pipeline definition YAML file stub. If not
+        provided, an attempt to infer the injection pipeline will be made based
+        on the injected dataset type name.
+    update_subsets : `bool`, optional
+        If True, update pipeline subsets to include the injection task.
+    excluded_tasks : `set` [`str`] | `str`
+        Set of task labels to exclude, or a comma-separated string of labels.
+    prefix : `str`, optional
+        Prefix to prepend to each affected post-injection dataset type name.
+    instrument : `str`, optional
+        Add instrument overrides. Must be a fully qualified class name.
+    config : `str` | `list` [`str`], optional
+        Config override for a task, in the format 'label:key=value'.
+    additional_pipelines: `list`[Pipeline] | `list`[`str`], optional
+        Additional pipelines to merge into the output pipeline, or their YAML
+        file locations. Tasks from these additional pipelines will be added to
+        the output injection pipeline.
+    additional_subset: `list`[`str`] | `str`, optional
+        A list of subset definitions in the form
+        "subset_name[:subset_description]".
+        These subsets will be created if they don't already exist.
+        All tasks from additional_pipelines will be added to these subsets.
+    log_level : `int`, optional
+        The log level to use for logging.
+
+    Returns
+    -------
+    pipeline : `lsst.pipe.base.Pipeline`
+        An expanded source injection pipeline.
+    """
+    logger = logging.getLogger(__name__)
+    logger.setLevel(log_level)
+
+    # Get the main reference pipeline
+    if isinstance(reference_pipeline, str):
+        pipeline = Pipeline.fromFile(reference_pipeline)
+    else:
+        pipeline = reference_pipeline
+
+    # Add an instrument override
+    if instrument:
+        pipeline.addInstrument(instrument)
+
+    # Infer the injection pipeline if not provided, and where possible
+    if not injection_pipeline:
+        injection_pipeline = _infer_injection_pipeline(
+            dataset_type_name,
+            logger,
+        )
+
+    # Merge the injection pipeline into the main pipeline
+    injection_task_label = _merge_injection_pipeline(pipeline, injection_pipeline, dataset_type_name, prefix)
+
+    # Apply all user-supplied config overrides
+    if config is not None:
+        _configure_injection_pipeline(pipeline, config, logger)
+
+    # Remove excluded tasks from the pipeline, and remove any empty subsets
+    pipeline = _remove_excluded_tasks(pipeline, excluded_tasks, logger)
+
+    # Prefix post-injection dataset type name connections and update subsets
+    _reconfigure_injection_pipeline(
+        pipeline, dataset_type_name, prefix, injection_task_label, update_subsets, logger
+    )
+
+    # Optionally include additional tasks in the injection pipeline.
+    if additional_pipelines:
+        _add_additional_pipelines(pipeline, additional_pipelines, additional_subset, logger)
 
     return pipeline

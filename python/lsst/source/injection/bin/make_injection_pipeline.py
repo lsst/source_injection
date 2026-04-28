@@ -35,17 +35,14 @@ def build_argparser():
     parser = ArgumentParser(
         description="""Make an expanded source injection pipeline.
 
-This script takes a reference pipeline definition file in YAML format and
-prefixes all post-injection dataset type names with the injected prefix. If an
-optional injection pipeline definition YAML file is also provided, the
-injection task will be merged into the pipeline.
+This command takes a reference pipeline definition file in YAML format and
+prefixes the input connections for all immediate consuming tasks of an injected
+dataset with the injected prefix. If an optional injection pipeline definition
+YAML file is also provided, the injection task will be merged into the pipeline.
 
-Unless explicitly excluded, all subsets from the reference pipeline containing
-the task which generates the injection dataset type will also be updated to
-include the injection task. A series of new injection subsets will also be
-constructed. These new subsets are copies of existent subsets, but with tasks
-not directly impacted by source injection removed. Injected subsets will be the
-original existent subset name with the 'injected_' prefix prepended.
+By default, all subsets from the reference pipeline containing the task which
+generates the injection dataset type will also be updated to include the
+injection task.
 
 When the injection pipeline is constructed, a check on all existing pipeline
 contracts is performed. If any contracts are violated, they are removed from
@@ -82,10 +79,10 @@ the pipeline. A warning is logged for each contract that is removed.
         metavar="FILE",
     )
     parser.add_argument(
-        "-e",
-        "--exclude-subsets",
+        "--no-update-subsets",
         help="Do not update pipeline subsets to include the injection task.",
-        action="store_true",
+        dest="update_subsets",
+        action="store_false",
     )
     parser.add_argument(
         "-x",
@@ -167,22 +164,20 @@ def main():
     logger.setLevel(logging.DEBUG)
 
     args = build_argparser().parse_args()
+    kwargs = {k: v for k, v in vars(args).items() if k not in ["filename", "overwrite"]}
+
     if hasattr(args, "filename"):
         if os.path.exists(args.filename):
             if not hasattr(args, "overwrite"):
                 raise RuntimeError(f"File {args.filename} already exists; use --overwrite to write anyway.")
             else:
                 logger.warning("File %s already exists; overwriting.", args.filename)
-        pipeline = make_injection_pipeline(
-            **{k: v for k, v in vars(args).items() if k not in ["filename", "overwrite"]}
-        )
+        pipeline = make_injection_pipeline(**kwargs)
         pipeline.write_to_uri(args.filename)
         logger.info(
             "Modified pipeline definition YAML file saved at %s.",
             os.path.realpath(args.filename),
         )
     else:
-        pipeline = make_injection_pipeline(
-            **{k: v for k, v in vars(args).items() if k not in ["filename", "overwrite"]}
-        )
+        pipeline = make_injection_pipeline(**kwargs)
         print("\n", pipeline, sep="")

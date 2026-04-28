@@ -15,43 +15,37 @@ The reference pipeline file must be a complete pipeline definition YAML file, ty
 Either the :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script or the associated :py:func:`~lsst.source.injection.make_injection_pipeline` Python function may be used to generate a fully qualified injection pipeline.
 Examples on this page illustrate the use of both methods.
 
-.. note::
-
-    Two legacy dynamic source injection pipelines are automatically generated inside the ``drp_pipe`` repository.
-    These pipelines are located in the ``$DRP_PIPE_DIR/pipelines/HSC`` directory, facilitating source injection data reductions for the Hyper Suprime-Cam RC2 and RC2 subset datasets: ``DRP-RC2+injected_deepCoadd.yaml`` and ``DRP-RC2_subset+injected_deepCoadd.yaml``, respectively.
-    As indicated by the appended name, synthetic sources are injected into the ``deepCoadd`` dataset type.
-
 .. _lsst.source.injection-ref-make-stubs:
 
 Injection Pipeline Stubs
 =========================
 
 A number of different source injection pipeline stubs have been constructed in the ``$SOURCE_INJECTION_DIR/pipelines`` directory.
-Each of these pipeline stubs contain a single task that is used to inject sources into a particular dataset type.
+Each of these pipeline stubs contains a single task that is used to inject sources into a particular dataset type.
 
 Although these injection pipeline YAML stubs can be used directly, it is recommended that the :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script or the associated :py:func:`~lsst.source.injection.make_injection_pipeline` Python function be used to generate a complete source injection pipeline definition YAML file for subsequent use.
-A complete injection pipeline definition file will contain the pipeline stub as a subtask alongside any additional tasks required to complete the source injection process.
-Tasks from the reference pipeline may either be removed or have specific configuration overrides applied as necessary to support subsequent injected source image data reduction.
+Tasks from a reference pipeline may either be removed or have specific configuration overrides applied as necessary to support subsequent injected source image data reduction.
 
 .. note::
 
-    When using the above utilities to construct a fully qualified injection pipeline, any existing subsets will also be updated to include the injection task where appropriate.
-    Furthermore, a series of ``injected_*`` subsets will be constructed.
-    These ``injected_*`` subsets are copies of existent subsets, but with any tasks not directly impacted by source injection removed.
+    When using the above utilities to construct a fully qualified injection pipeline, only the immediate consuming tasks of the injected dataset type have their input connections modified to accept the injected (prefixed) dataset type.
+    All further downstream dataset type names are left unchanged, and any tasks consuming those downstream dataset types are also left unchanged, unless explicitly reconfigured by the user.
+
+    Any existing subsets containing the task that produces the dataset type being injected into will be updated to also include the injection task.
+    This behavior can be disabled by passing ``--no-update-subsets`` on the command line, or setting ``update_subsets`` to ``False`` in Python.
 
     For example, if the ``inject_exposure.yaml`` pipeline stub is used to inject sources into a ``post_isr_image`` dataset type, the subset of the reference pipeline containing the ``isr`` task will be updated to also include the ``injectExposure`` task.
-
-    This behavior can be disabled by passing the ``-e`` argument on the command line, or setting ``exclude_subsets`` to ``True`` in Python.
-    Additionally, a new subset, ``injected_[MY_SUBSET]``, will also be created containing all tasks from the ``[MY_SUBSET]`` subset but with the ``isr`` task removed (as sources will be injected after this task has run).
 
 .. note::
 
     After a fully qualified injection pipeline has been generated, a check is performed to ensure that all reference :ref:`pipeline contracts <pipeline_creating_contracts>` (if any) are satisfied.
     Pipeline contracts are a means by which to ensure that certain configuration values are set in a predictable manner.
-    When generating an injection pipeline, it's possible that some of these contracts will become invalid.
-    For example, if a contract specifies that the dataset type produced by a task prior to source injection matches the dataset type consumed by a task after source injection, this contract may become invalid if the tasks downstream of source injection have been modified to instead consume the new source injected input.
-    The :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script and the :py:func:`~lsst.source.injection.make_injection_pipeline` Python function will check for this and warn if any contracts are invalid.
-    Invalid contracts will be removed from the final output pipeline YAML.
+
+    When generating an injection pipeline, it's possible that some contracts are invalidated.
+    For example, if a contract specifies that the dataset type produced by a task prior to source injection matches the dataset type consumed by a task after source injection, this contract may become invalid if the task after source injection has been modified to instead consume the new source injected input.
+
+    The :doc:`make_injection_pipeline <../scripts/make_injection_pipeline>` command line script and the :py:func:`~lsst.source.injection.make_injection_pipeline` Python function will check for this and warn if any contracts are invalid when the pipeline is generated.
+    Invalid contracts will be removed from the final output pipeline YAML, with a warning.
 
 The table below lists the available pipeline YAML stubs inside the ``$SOURCE_INJECTION_DIR/pipelines`` directory and the dataset types they are designed to inject sources into:
 
@@ -182,7 +176,7 @@ Visualize an Injection Pipeline
 Any pipeline YAML, including an injection pipeline, can be visualized to clarify exactly what the pipeline does.
 In this section we provide instructions for visualizing the ``DRP-injection.yaml`` pipeline generated in the above examples.
 Options for text-based outputs on the command line and rich rendered outputs are presented.
-The tasks and dataset types printed below are accurate as of ``w_2025_37`` of the LSST Science Pipelines.
+The tasks and dataset types printed below are accurate as of ``w_2026_17`` of the LSST Science Pipelines.
 
 .. tip::
 
@@ -232,70 +226,57 @@ returning:
 
 .. code-block:: shell
 
-                      ○  flat: {detector, physical_filter} ExposureF
-                      │
-                    ○ │  bfk: {detector} BrighterFatterKernel
-                    │ │
-                  ○ │ │  camera: {instrument} Camera
-                  │ │ │
-                ○ │ │ │  crosstalk: {detector} CrosstalkCalib
-                │ │ │ │
-              ○ │ │ │ │  cti: {detector} IsrCalib
-              │ │ │ │ │
-            ◍ │ │ │ │ │  dark, bias: {detector} ExposureF
-            │ │ │ │ │ │
-          ○ │ │ │ │ │ │  defects: {detector} Defects
-          │ │ │ │ │ │ │
-        ○ │ │ │ │ │ │ │  linearizer: {detector} Linearizer
-        │ │ │ │ │ │ │ │
-      ○ │ │ │ │ │ │ │ │  ptc: {detector} PhotonTransferCurveDataset
-      │ │ │ │ │ │ │ │ │
-    ○ │ │ │ │ │ │ │ │ │  raw: {detector, exposure} Exposure
-    ╰─┴─┴─┴─┴─┴─┴─┴─┴─┤
-                      ■  isr: {detector, exposure}
-                    ╭─┤
-                    ○ │  isrStatistics: {detector, exposure} StructuredDataDict
-                      │
-                      ○  post_isr_image: {detector, exposure} Exposure
-                      │
-                    ○ │  injection_catalog: {band, htm7} ArrowAstropy
-                    │ │
-                  ○ │ │  visit_summary: {visit} ExposureCatalog
-                  ╰─┴─┤
-                      ■  injectExposure: {detector, exposure}
-                    ╭─┤
-                    ○ │  injected_post_isr_image_catalog: {detector, exposure}...[1]
-                      │
-                      ○  injected_post_isr_image: {detector, exposure} Exposure
-                      │
-                    ○ │  the_monster_20250219: {htm7} SimpleCatalog
-                    ╰─┤
-                      ■  calibrateImage: {detector, visit}
-                    ╭─┤
-                    ○ │  injected_preliminary_visit_image: {detector, visit} E...[2]
-                    ╭─┤
-                    ○ │  injected_preliminary_visit_image_background: {detecto...[3]
-                    ╭─┤
-                    ◍ │  injected_single_visit_star_footprints, injected_singl...[4]
-                    ╭─┤
-                    ◍ │  injected_single_visit_star_unstandardized, injected_s...[5]
-                      │
-                      ◍  injected_initial_photometry_match_detector, injected_...[6]
-    [1]
-      injected_post_isr_image_catalog: {detector, exposure} ArrowAstropy
-    [2]
-      injected_preliminary_visit_image: {detector, visit} ExposureF
-    [3]
-      injected_preliminary_visit_image_background: {detector, visit} Background
-    [4]
-      injected_single_visit_star_footprints,
-      injected_single_visit_psf_star_footprints: {detector, visit} SourceCatalog
-    [5]
-      injected_single_visit_star_unstandardized, injected_single_visit_psf_star:
-      {detector, visit} ArrowAstropy
-    [6]
-      injected_initial_photometry_match_detector,
-      injected_initial_astrometry_match_detector: {detector, visit} Catalog
+                    ○  ptc: {detector} PhotonTransferCurveDataset
+                    │
+                  ○ │  camera: {instrument} Camera
+                  │ │
+                ○ │ │  crosstalk: {detector} CrosstalkCalib
+                │ │ │
+              ◍ │ │ │  dark, bias: {detector} ExposureF
+              │ │ │ │
+            ○ │ │ │ │  defects: {detector} Defects
+            │ │ │ │ │
+          ○ │ │ │ │ │  flat: {detector, physical_filter} ExposureF
+          │ │ │ │ │ │
+        ◍ │ │ │ │ │ │  gain_correction, electroBfDistortionMatrix, cti: {detector} IsrCalib
+        │ │ │ │ │ │ │
+      ○ │ │ │ │ │ │ │  linearizer: {detector} Linearizer
+      │ │ │ │ │ │ │ │
+    ○ │ │ │ │ │ │ │ │  raw: {detector, exposure} Exposure
+    ╰─┴─┴─┴─┴─┴─┴─┴─┤
+                    ■  isr: {detector, exposure}
+                  ╭─┤
+                  ○ │  isrStatistics: {detector, exposure} StructuredDataDict
+                    │
+                    ○  post_isr_image: {detector, exposure} Exposure
+                    │
+                  ○ │  injection_catalog: {band, htm7} ArrowAstropy
+                  │ │
+                ○ │ │  visit_summary: {visit} ExposureCatalog
+                ╰─┴─┤
+                    ■  injectExposure: {detector, exposure}
+                  ╭─┤
+                  ○ │  injected_post_isr_image_catalog: {detector, exposure} ArrowAstropy
+                    │
+                    ○  injected_post_isr_image: {detector, exposure} Exposure
+                    │
+                  ○ │  astrometry_camera: {physical_filter} Camera
+                  │ │
+                ○ │ │  the_monster_20250219: {htm7} SimpleCatalog
+                ╰─┴─┤
+                    ■  calibrateImage: {detector, visit}
+                  ╭─┤
+                  ○ │  preliminary_visit_image: {detector, visit} ExposureF
+                  ╭─┤
+                  ○ │  preliminary_visit_image_background: {detector, visit} Background
+                  ╭─┤
+                  ○ │  preliminary_visit_mask: {detector, visit} Mask
+                  ╭─┤
+                  ◍ │  single_visit_star_footprints, single_visit_psf_star_footprints: {detector, visit} SourceCatalog
+                  ╭─┤
+                  ◍ │  single_visit_star_unstandardized, single_visit_psf_star: {detector, visit} ArrowAstropy
+                    │
+                    ◍  initial_photometry_match_detector, initial_astrometry_match_detector: {detector, visit} Catalog
 
 .. _lsst.source.injection-ref-make-visualize-render:
 

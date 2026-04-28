@@ -120,7 +120,7 @@ class SourceInjectionUtilsTestCase(TestCase):
             dataset_type_name="postISRCCD",  # Unchanged to match task default
             reference_pipeline=self.reference_pipeline,
             injection_pipeline=injection_pipeline,
-            exclude_subsets=False,
+            update_subsets=True,
             excluded_tasks={"calibrate"},
             prefix="injected_",
             instrument="lsst.obs.subaru.HyperSuprimeCam",
@@ -149,9 +149,9 @@ class SourceInjectionUtilsTestCase(TestCase):
                 self.assertEqual(t.outputs["output_catalog"].dataset_type_name, "injected_postISRCCD_catalog")
             elif t.label == "characterizeImage":
                 self.assertEqual(t.inputs["exposure"].dataset_type_name, "injected_postISRCCD")
-                self.assertEqual(t.outputs["characterized"].dataset_type_name, "injected_icExp")
-                self.assertEqual(t.outputs["backgroundModel"].dataset_type_name, "injected_icExpBackground")
-                self.assertEqual(t.outputs["sourceCat"].dataset_type_name, "injected_icSrc")
+                self.assertEqual(t.outputs["characterized"].dataset_type_name, "icExp")
+                self.assertEqual(t.outputs["backgroundModel"].dataset_type_name, "icExpBackground")
+                self.assertEqual(t.outputs["sourceCat"].dataset_type_name, "icSrc")
 
     def test_ingest_injection_catalog(self):
         input_dataset_refs = ingest_injection_catalog(

@@ -125,7 +125,7 @@ class SourceInjectionUtilsTestCase(TestCase):
             prefix="injected_",
             instrument="lsst.obs.subaru.HyperSuprimeCam",
             additional_pipelines=[additional_pipeline],
-            additional_subset=["newSubset:newSubset description"],
+            additional_subset=["additional_subset:Additional subset description"],
             log_level=logging.DEBUG,
         )
 
@@ -137,7 +137,10 @@ class SourceInjectionUtilsTestCase(TestCase):
         # Test that all surviving tasks are still in a subset.
         surviving_task_subsets = [merged_pipeline.findSubsetsWithLabel(x) for x in surviving_task_labels]
         self.assertEqual(sum(1 for s in surviving_task_subsets if s), len(surviving_task_labels))
-        self.assertIn("newSubset", merged_pipeline.findSubsetsWithLabel("additional_task"))
+        self.assertIn("additional_subset", merged_pipeline.findSubsetsWithLabel("additional_task"))
+        self.assertNotIn("injected_test_subset", merged_pipeline.findSubsetsWithLabel("isr"))
+        self.assertIn("injected_test_subset", merged_pipeline.findSubsetsWithLabel("inject_exposure"))
+        self.assertIn("injected_test_subset", merged_pipeline.findSubsetsWithLabel("characterizeImage"))
 
         # Test that connection names have been properly configured.
         for t in merged_pipeline.to_graph().tasks.values():

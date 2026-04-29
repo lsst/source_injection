@@ -23,7 +23,6 @@ from __future__ import annotations
 
 __all__ = ["make_injection_pipeline"]
 
-import itertools
 import logging
 import warnings
 
@@ -322,6 +321,99 @@ def _get_pipeline_graph(pipeline: Pipeline, logger: logging.Logger) -> PipelineG
     return pipeline_graph
 
 
+def _collect_injected_task_labels(
+    pipeline_graph: PipelineGraph,
+    dataset_type_name: str,
+) -> set[str]:
+    """Collect tasks downstream of the injection point.
+
+    Parameters
+    ----------
+    pipeline_graph : `~lsst.pipe.base.PipelineGraph`
+        Pipeline graph to inspect.
+    dataset_type_name : `str`
+        Name of the dataset type being injected into.
+
+    Returns
+    -------
+    injected_task_labels : `set` [`str`]
+        Labels of all tasks that consume the injected dataset type directly or
+        indirectly, including the injection task itself if present.
+    """
+    injected_task_labels = set()
+
+    dataset_type_frontier = {dataset_type_name}
+    seen_dataset_types = set(dataset_type_frontier)
+
+    # Note: here we opt to walk the pipeline graph instead of using
+    # `pipeline_graph._xgraph.successors`. The `_xgraph` attribute is a private
+    # implementation detail and therefore not a guaranteed interface.
+
+    while dataset_type_frontier:
+        next_frontier = set()
+        for current_dataset_type in dataset_type_frontier:
+            for task_node in pipeline_graph.consumers_of(current_dataset_type):
+                if task_node.label in injected_task_labels:
+                    continue
+
+                injected_task_labels.add(task_node.label)
+
+                output_edges = task_node.iter_all_outputs()
+
+                for edge in output_edges:
+                    output_dataset_type = edge.parent_dataset_type_name
+                    if output_dataset_type not in seen_dataset_types:
+                        seen_dataset_types.add(output_dataset_type)
+                        next_frontier.add(output_dataset_type)
+        dataset_type_frontier = next_frontier
+
+    return injected_task_labels
+
+
+def _add_injected_subsets(
+    pipeline: Pipeline,
+    injected_task_labels: set[str],
+    prefix: str,
+    logger: logging.Logger,
+) -> int:
+    """Create injected variants of existing subsets.
+
+    Parameters
+    ----------
+    pipeline : `~lsst.pipe.base.Pipeline`
+        Pipeline to modify in place.
+    injected_task_labels : `set` [`str`]
+        Labels of tasks downstream of the injection point.
+    prefix : `str`
+        Prefix to prepend to the subset names.
+    logger : `~logging.Logger`
+        Logger for warning and info messages.
+
+    Returns
+    -------
+    subset_count : `int`
+        Number of injected subsets created.
+    """
+    if not injected_task_labels:
+        return 0
+
+    injected_label_specifier = LabelSpecifier(labels=injected_task_labels)
+    injected_pipeline = pipeline.subsetFromLabels(injected_label_specifier, pipeline.PipelineSubsetCtrl.EDIT)
+
+    injected_subset_labels = set()
+    for subset_label, subset_tasks in injected_pipeline.subsets.items():
+        if not subset_tasks:
+            continue
+        injected_subset_label = prefix + subset_label
+        injected_subset_description = (
+            f"All tasks from the '{subset_label}' subset impacted by source injection."
+        )
+        pipeline.addLabeledSubset(injected_subset_label, injected_subset_description, subset_tasks)
+        injected_subset_labels.add(injected_subset_label)
+
+    return len(injected_subset_labels)
+
+
 def _reconfigure_injection_pipeline(
     pipeline: Pipeline,
     dataset_type_name: str,
@@ -354,6 +446,7 @@ def _reconfigure_injection_pipeline(
     """
     # Use pipeline graph to determine tasks with connections to be modified
     pipeline_graph = _get_pipeline_graph(pipeline, logger)
+    injected_task_labels = _collect_injected_task_labels(pipeline_graph, dataset_type_name)
     post_injection_tasks = pipeline_graph.consumers_of(dataset_type_name)
     if len(post_injection_tasks) == 0:
         logger.warning(
@@ -365,9 +458,11 @@ def _reconfigure_injection_pipeline(
     else:
         post_injection_tasks = []
 
-    # Loop over each post injection task; prefix input connections
+    # Loop over each post injection task; prefix input connections only
     for task_node in post_injection_tasks:
-        for edge in itertools.chain(task_node.init.inputs.values(), task_node.inputs.values()):
+        input_edges = task_node.iter_all_inputs()
+
+        for edge in input_edges:
             if hasattr(task_node.config.connections.ConnectionsClass, edge.connection_name):
                 if edge.parent_dataset_type_name == dataset_type_name:
                     pipeline.addConfigOverride(
@@ -386,8 +481,17 @@ def _reconfigure_injection_pipeline(
         for subset in precursor_subsets:
             pipeline.addLabelToSubset(subset, injection_task_label)
 
-    grammar = "task" if len(pipeline) == 1 else "tasks"
-    logger.info("Made an injection pipeline containing %d %s.", len(pipeline), grammar)
+    injected_subset_count = 0
+    if update_subsets:
+        injected_subset_count = _add_injected_subsets(pipeline, injected_task_labels, prefix, logger)
+
+    logger.info(
+        "Made an injection pipeline containing %d task%s and %d injected subset%s.",
+        len(pipeline),
+        "" if len(pipeline) == 1 else "s",
+        injected_subset_count,
+        "" if injected_subset_count == 1 else "s",
+    )
 
 
 def _add_additional_pipelines(

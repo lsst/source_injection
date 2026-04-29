@@ -32,6 +32,7 @@ Tasks from a reference pipeline may either be removed or have specific configura
     All further downstream dataset type names are left unchanged, and any tasks consuming those downstream dataset types are also left unchanged, unless explicitly reconfigured by the user.
 
     Any existing subsets containing the task that produces the dataset type being injected into will be updated to also include the injection task.
+    In addition, injected variants of existing subsets are constructed with the ``injected_`` prefix; these variants contain the injection task and all tasks downstream of the point of source injection.
     This behavior can be disabled by passing ``--no-update-subsets`` on the command line, or setting ``update_subsets`` to ``False`` in Python.
 
     For example, if the ``inject_exposure.yaml`` pipeline stub is used to inject sources into a ``post_isr_image`` dataset type, the subset of the reference pipeline containing the ``isr`` task will be updated to also include the ``injectExposure`` task.

@@ -75,7 +75,7 @@ The ``injectExposure`` task (:lsst-task:`~lsst.source.injection.ExposureInjectTa
 .. note::
 
     Existing subsets will have injection variants denoted by the prefix ``injected_``.
-    These subsets only include the injection task (where relevant) and any tasks after the point of source injection.
+    These subsets include the injection task and any tasks after the point of source injection.
     The ``injected_`` subsets can save memory and runtime if the tasks prior to injection have already been run.
 
 The image plane of the ``injected_post_isr_image`` will be modified from the original by the addition of a light profile for every injected object.
@@ -87,8 +87,7 @@ The variance plane gains additional estimated variance consistent with the amoun
     Setting ``inject_variance`` to ``False`` in the injection task config will prevent any changes to the variance plane.
     Not modifying the variance plane is likely to bias any downstream measurements and should normally never be done, unless such bias is the object of study.
 
-Assuming processing completes successfully, the ``injected_post_isr_image`` and associated ``injected_post_isr_image_catalog`` will be written to the butler repository.
-Various downstream data products should also exist, including the ``injected_preliminary_visit_image`` dataset type (see example images below).
+Assuming processing completes successfully, the ``injected_post_isr_image`` and associated ``injected_post_isr_image_catalog`` will be written to the butler repository (see example images below).
 
 Standard log messages that get printed as part of a successful run may include lines similar to:
 
@@ -112,8 +111,7 @@ An example injected output produced by the above snippet is shown below.
 
     ..
 
-    Calibrated exposure (``preliminary_visit_image`` and
-    ``injected_preliminary_visit_image``) data for LSSTCam visit 2025050300351, detector 94, showcasing the injection of a series of synthetic Sérsic sources.
+    Calibrated exposure data for LSSTCam visit 2025050300351, detector 94, showcasing the injection of a series of synthetic Sérsic sources before and after injection.
     Images are asinh scaled.
 
     .. list-table::

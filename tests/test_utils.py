@@ -120,12 +120,12 @@ class SourceInjectionUtilsTestCase(TestCase):
             dataset_type_name="postISRCCD",  # Unchanged to match task default
             reference_pipeline=self.reference_pipeline,
             injection_pipeline=injection_pipeline,
-            exclude_subsets=False,
+            update_subsets=True,
             excluded_tasks={"calibrate"},
             prefix="injected_",
             instrument="lsst.obs.subaru.HyperSuprimeCam",
             additional_pipelines=[additional_pipeline],
-            additional_subset=["newSubset:newSubset description"],
+            additional_subset=["additional_subset:Additional subset description"],
             log_level=logging.DEBUG,
         )
 
@@ -137,7 +137,10 @@ class SourceInjectionUtilsTestCase(TestCase):
         # Test that all surviving tasks are still in a subset.
         surviving_task_subsets = [merged_pipeline.findSubsetsWithLabel(x) for x in surviving_task_labels]
         self.assertEqual(sum(1 for s in surviving_task_subsets if s), len(surviving_task_labels))
-        self.assertIn("newSubset", merged_pipeline.findSubsetsWithLabel("additional_task"))
+        self.assertIn("additional_subset", merged_pipeline.findSubsetsWithLabel("additional_task"))
+        self.assertNotIn("injected_test_subset", merged_pipeline.findSubsetsWithLabel("isr"))
+        self.assertIn("injected_test_subset", merged_pipeline.findSubsetsWithLabel("inject_exposure"))
+        self.assertIn("injected_test_subset", merged_pipeline.findSubsetsWithLabel("characterizeImage"))
 
         # Test that connection names have been properly configured.
         for t in merged_pipeline.to_graph().tasks.values():
@@ -149,9 +152,9 @@ class SourceInjectionUtilsTestCase(TestCase):
                 self.assertEqual(t.outputs["output_catalog"].dataset_type_name, "injected_postISRCCD_catalog")
             elif t.label == "characterizeImage":
                 self.assertEqual(t.inputs["exposure"].dataset_type_name, "injected_postISRCCD")
-                self.assertEqual(t.outputs["characterized"].dataset_type_name, "injected_icExp")
-                self.assertEqual(t.outputs["backgroundModel"].dataset_type_name, "injected_icExpBackground")
-                self.assertEqual(t.outputs["sourceCat"].dataset_type_name, "injected_icSrc")
+                self.assertEqual(t.outputs["characterized"].dataset_type_name, "icExp")
+                self.assertEqual(t.outputs["backgroundModel"].dataset_type_name, "icExpBackground")
+                self.assertEqual(t.outputs["sourceCat"].dataset_type_name, "icSrc")
 
     def test_ingest_injection_catalog(self):
         input_dataset_refs = ingest_injection_catalog(

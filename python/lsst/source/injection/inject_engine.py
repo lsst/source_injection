@@ -391,33 +391,6 @@ def is_wcs_galsim_default(
         return not any(k in hdr for k in ["CD1_1", "CDELT1"])
 
 
-def get_gains_from_amps(
-    exposure: ExposureF,
-) -> tuple[list[Box2I], list[float]] | tuple[None, None]:
-    """Retrieve the bounding boxes and gains for each amplifier, if applicable.
-    If this cannot be done, return None.
-
-    Parameters
-    ----------
-    exposure : `lsst.afw.image.ExposureF`
-        The exposure to inject synthetic sources into.
-
-    Returns
-    -------
-    bboxes : `list` [`lsst.geom.Box2I`]
-        Bounding boxes for each amplifier region in the exposure.
-    gains : `list` [`float`]
-        The gain recorded for each amplifier in this exposure.
-    """
-    try:
-        amplifiers = exposure.getDetector().getAmplifiers()
-        bboxes = [amplifier.getBBox() for amplifier in amplifiers]
-        gains = [amplifier.getGain() for amplifier in amplifiers]
-    except AttributeError:
-        return None, None
-    return bboxes, gains
-
-
 def infer_gain_from_image(
     exposure: ExposureF,
     bad_mask_names: list[str] | None = None,
@@ -440,18 +413,25 @@ def infer_gain_from_image(
     """
     image_arr = exposure.image.array
     var_arr = exposure.variance.array
-    mask_arr = exposure.mask.array
     good = np.isfinite(image_arr) & np.isfinite(var_arr)
-    if bad_mask_names is not None:
-        bad_mask_bit_mask = exposure.mask.getPlaneBitMask(bad_mask_names)
-        good &= (mask_arr.astype(int) & bad_mask_bit_mask) == 0
+
+    mask = exposure.mask
+    # Only look at mask names in the mask_plane_dict.
+    # Otherwise, getPlaneBitMask throws an exception.
+    mask_plane_dict = mask.getMaskPlaneDict()
+    if bad_mask_names is None:
+        bad_mask_names = []
+    bad_mask_names = [name for name in bad_mask_names if name in mask_plane_dict]
+    if len(bad_mask_names) > 0:
+        bad_mask_bit_mask = mask.getPlaneBitMask(bad_mask_names)
+        good &= (mask.array.astype(int) & bad_mask_bit_mask) == 0
+
     fit = np.polyfit(image_arr[good], var_arr[good], deg=1)
     return 1.0 / fit[0]
 
 
 def get_gain_map(
     exposure: ExposureF,
-    full_bounds: galsim.BoundsI,
     bad_mask_names: list[str] | None = None,
 ) -> tuple[galsim.Image, bool]:
     """Retrieve gains for each pixel.
@@ -460,8 +440,6 @@ def get_gain_map(
     ----------
     exposure : `lsst.afw.image.ExposureF`
         The exposure to inject synthetic sources into.
-    full_bounds : `galsim.BoundsI`
-        Bounding box covering the entire exposure.
     bad_mask_names : `list` [`str`], optional
         Names of any mask plane bits that could indicate a pathological flux
         vs. variance relationship.
@@ -472,26 +450,27 @@ def get_gain_map(
         The gain to use in each pixel.
     is_single_CCD : `bool`
         Whether the exposure represents a single CCD, having well-defined
-        amplifier regions with recorded gains.
+        amplifier regions.
     """
-    gain_map = galsim.Image(full_bounds, dtype=float)
+    full_bbox = exposure.getBBox()
     is_single_CCD = True
-
-    bboxes, gains = get_gains_from_amps(exposure)
-    if bboxes is None:
+    try:
+        amplifiers = exposure.getDetector().getAmplifiers()
+        bboxes = [amplifier.getBBox() for amplifier in amplifiers]
+    except AttributeError:
         # Separate amplifier bounding boxes not found.
         # This exposure does not represent a single CCD.
         is_single_CCD = False
-        bboxes = [full_bounds]
-        gains = [infer_gain_from_image(exposure, bad_mask_names)]
+        bboxes = [full_bbox]
 
-    assert gains is not None  # Make mypy happy.
+    gains = [infer_gain_from_image(exposure.subset(bbox), bad_mask_names) for bbox in bboxes]
+
+    full_bounds = galsim.BoundsI(full_bbox.minX, full_bbox.maxX, full_bbox.minY, full_bbox.maxY)
+    gain_map = galsim.Image(full_bounds, dtype=float)
     for bbox, gain in zip(bboxes, gains):
-        if is_single_CCD:
-            bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
-        else:
-            bounds = galsim.BoundsI(bbox.getXMin(), bbox.getXMax(), bbox.getYMin(), bbox.getYMax())
+        bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
         gain_map[bounds].array[:] = 1.0 / gain
+
     return gain_map, is_single_CCD
 
 
@@ -516,7 +495,7 @@ def add_noise_to_galsim_image(
         The variance to use for the noise generating process in each pixel.
     is_single_CCD : `bool`
         Whether the exposure represents a single CCD, having well-defined
-        amplifier regions with recorded gains.
+        amplifier regions.
     gain_map : `galsim.Image`
         The gain to use in each pixel of the full exposure.
     object_common_bounds : `galsim.BoundsI`
@@ -648,7 +627,7 @@ def inject_galsim_objects_into_exposure(
     galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
-    gain_map, is_single_CCD = get_gain_map(exposure, full_bounds, bad_mask_names)
+    gain_map, is_single_CCD = get_gain_map(exposure, bad_mask_names)
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []

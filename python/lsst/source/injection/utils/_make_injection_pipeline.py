@@ -408,8 +408,17 @@ def _add_injected_subsets(
         injected_subset_description = (
             f"All tasks from the '{subset_label}' subset impacted by source injection."
         )
-        pipeline.addLabeledSubset(injected_subset_label, injected_subset_description, subset_tasks)
-        injected_subset_labels.add(injected_subset_label)
+
+        # If the subset already exists, add any new tasks to the existing
+        # subset rather than creating a new subset with the same name.
+        # Used in pipelines with more than one injection tasks.
+        if injected_subset_label in pipeline.subsets.keys():
+            existing_subset_tasks = set(pipeline.subsets[injected_subset_label])
+            for injected_subset_task in set(subset_tasks) - existing_subset_tasks:
+                pipeline.addLabelToSubset(injected_subset_label, injected_subset_task)
+        else:
+            pipeline.addLabeledSubset(injected_subset_label, injected_subset_description, subset_tasks)
+            injected_subset_labels.add(injected_subset_label)
 
     return len(injected_subset_labels)
 

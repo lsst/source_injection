@@ -106,7 +106,6 @@ class VisitInjectTask(BaseInjectTask):
 
     def runQuantum(self, butler_quantum_context, input_refs, output_refs):
         inputs = butler_quantum_context.get(input_refs)
-        detector_id = inputs["input_exposure"].getDetector().getId()
 
         try:
             visit_summary = inputs["visit_summary"].get()
@@ -117,6 +116,7 @@ class VisitInjectTask(BaseInjectTask):
             inputs["wcs"] = inputs["input_exposure"].getWcs()
         else:
             # Use external PSF, PhotoCalib and WCS.
+            detector_id = inputs["input_exposure"].getDetector().getId()
             detector_summary = visit_summary.find(detector_id)
             if detector_summary:
                 inputs["psf"] = detector_summary.getPsf()

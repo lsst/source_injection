@@ -440,7 +440,7 @@ def get_gain_map(
     exposure: ExposureF,
     bad_mask_names: list[str] | None = None,
     logger: Any | None = None,
-) -> tuple[galsim.Image, bool]:
+) -> galsim.Image:
     """Retrieve gains for each pixel.
 
     Parameters
@@ -457,19 +457,14 @@ def get_gain_map(
     -------
     gain_map : `galsim.Image`
         The gain to use in each pixel.
-    is_single_CCD : `bool`
-        Whether the exposure represents a single CCD, having well-defined
-        amplifier regions.
     """
     full_bbox = exposure.getBBox()
-    is_single_CCD = True
     try:
         amplifiers = exposure.getDetector().getAmplifiers()
-        bboxes = [amplifier.getBBox() for amplifier in amplifiers]
+        bboxes = [amplifier.getBBox() for amplifier in amplifiers] if amplifiers else None
     except AttributeError:
-        # Separate amplifier bounding boxes not found.
-        # This exposure does not represent a single CCD.
-        is_single_CCD = False
+        bboxes = None
+    if not bboxes:
         bboxes = [full_bbox]
 
     gains = [infer_gain_from_image(exposure.subset(bbox), bad_mask_names, logger) for bbox in bboxes]
@@ -480,21 +475,21 @@ def get_gain_map(
         bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
         gain_map[bounds].array[:] = 1.0 / gain
 
-    return gain_map, is_single_CCD
+    return gain_map
 
 
 def add_noise_to_galsim_image(
     image_template: galsim.Image,
     var_template: galsim.Image,
-    is_single_CCD: bool,
+    is_coadd: bool,
     gain_map: galsim.Image,
     object_common_bounds: galsim.BoundsI,
     noise_seed: int | None = None,
     logger: Any | None = None,
 ) -> tuple[galsim.Image, galsim.Image]:
     """Add noise to a supplied image, and adjust the estimated variance
-    accordingly. If the image represents a single CCD exposure, add Poisson
-    shot noise. Otherwise add Gaussian noise.
+    accordingly. If the image represents a coadd, add Gaussian noise.
+    Otherwise add Poisson shot noise.
 
     Parameters
     ----------
@@ -502,9 +497,9 @@ def add_noise_to_galsim_image(
         The image to add noise to.
     var_template : `galsim.Image`
         The variance to use for the noise generating process in each pixel.
-    is_single_CCD : `bool`
-        Whether the exposure represents a single CCD, having well-defined
-        amplifier regions.
+    is_coadd : `bool`
+        Whether the exposure is a coadd. If True, Gaussian noise is used;
+        if False, Poisson shot noise is used.
     gain_map : `galsim.Image`
         The gain to use in each pixel of the full exposure.
     object_common_bounds : `galsim.BoundsI`
@@ -535,7 +530,7 @@ def add_noise_to_galsim_image(
 
     rng = galsim.BaseDeviate(noise_seed)
 
-    if is_single_CCD:
+    if not is_coadd:
         # Treat noise_template, which is the expected amount of
         # injected flux divided by the gain, as the Poisson mean of
         # the number of photons collected by each pixel.
@@ -636,7 +631,8 @@ def inject_galsim_objects_into_exposure(
     galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
-    gain_map, is_single_CCD = get_gain_map(exposure, bad_mask_names, logger)
+    gain_map = get_gain_map(exposure, bad_mask_names, logger)
+    is_coadd = exposure.info.getCoaddInputs() is not None
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []
@@ -753,7 +749,7 @@ def inject_galsim_objects_into_exposure(
                 image_template, var_template = add_noise_to_galsim_image(
                     image_template,
                     var_template,
-                    is_single_CCD,
+                    is_coadd,
                     gain_map,
                     object_common_bounds,
                     noise_seed,

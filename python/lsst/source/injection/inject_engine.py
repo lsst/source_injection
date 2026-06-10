@@ -394,6 +394,7 @@ def is_wcs_galsim_default(
 def infer_gain_from_image(
     exposure: ExposureF,
     bad_mask_names: list[str] | None = None,
+    logger: Any | None = None,
 ) -> float:
     """Fit a straight line to image flux vs. estimated variance in each pixel
     of an exposure, and from that infer an estimated average gain.
@@ -405,6 +406,8 @@ def infer_gain_from_image(
     bad_mask_names : `list` [`str`], optional
         Names of any mask plane bits that could indicate a pathological flux
         vs. variance relationship.
+    logger : `lsst.utils.logging.LsstLogAdapter`, optional
+        Logger to use for logging messages.
 
     Returns
     -------
@@ -421,6 +424,9 @@ def infer_gain_from_image(
     mask_plane_dict = mask.getMaskPlaneDict()
     if bad_mask_names is None:
         bad_mask_names = []
+    missing = set(bad_mask_names) - set(mask_plane_dict)
+    if missing and logger:
+        logger.warning("Mask planes not found in exposure (skipping): %s", missing)
     bad_mask_names = [name for name in bad_mask_names if name in mask_plane_dict]
     if len(bad_mask_names) > 0:
         bad_mask_bit_mask = mask.getPlaneBitMask(bad_mask_names)
@@ -433,6 +439,7 @@ def infer_gain_from_image(
 def get_gain_map(
     exposure: ExposureF,
     bad_mask_names: list[str] | None = None,
+    logger: Any | None = None,
 ) -> tuple[galsim.Image, bool]:
     """Retrieve gains for each pixel.
 
@@ -443,6 +450,8 @@ def get_gain_map(
     bad_mask_names : `list` [`str`], optional
         Names of any mask plane bits that could indicate a pathological flux
         vs. variance relationship.
+    logger : `lsst.utils.logging.LsstLogAdapter`, optional
+        Logger to use for logging messages.
 
     Returns
     -------
@@ -463,7 +472,7 @@ def get_gain_map(
         is_single_CCD = False
         bboxes = [full_bbox]
 
-    gains = [infer_gain_from_image(exposure.subset(bbox), bad_mask_names) for bbox in bboxes]
+    gains = [infer_gain_from_image(exposure.subset(bbox), bad_mask_names, logger) for bbox in bboxes]
 
     full_bounds = galsim.BoundsI(full_bbox.minX, full_bbox.maxX, full_bbox.minY, full_bbox.maxY)
     gain_map = galsim.Image(full_bounds, dtype=float)
@@ -627,7 +636,7 @@ def inject_galsim_objects_into_exposure(
     galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
-    gain_map, is_single_CCD = get_gain_map(exposure, bad_mask_names)
+    gain_map, is_single_CCD = get_gain_map(exposure, bad_mask_names, logger)
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []

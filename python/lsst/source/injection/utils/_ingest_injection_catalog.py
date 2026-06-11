@@ -75,7 +75,7 @@ def ingest_injection_catalog(
 
     # Concatenate inputs to a single Table if required.
     if isinstance(table, list):
-        table = vstack(table)
+        table = vstack(table, metadata_conflicts="silent")
 
     # Register the dataset type and collection.
     table_dataset_type = DatasetType(

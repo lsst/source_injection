@@ -387,6 +387,7 @@ class BaseInjectTask(PipelineTask):
         metadata = input_exposure.getMetadata()
         input_dataset_type = self.config.connections.input_exposure.format(**self.config.connections.toDict())
         metadata.set("INJECTED", input_dataset_type, "Initial source injection dataset type")
+        input_exposure.getInfo().setVisitInfo(input_exposure.visitInfo.copyWith(hasSimulatedContent=True))
         for flag, value in sorted(binary_flags.items(), key=lambda item: item[1]):
             injection_catalog.meta[flag] = value
 

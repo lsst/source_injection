@@ -31,6 +31,7 @@ import lsst.utils.tests
 from lsst.geom import Point2D, SpherePoint, degrees
 from lsst.source.injection.inject_engine import (
     generate_galsim_objects,
+    get_gain_map,
     infer_gain_from_image,
     inject_galsim_objects_into_exposure,
     make_galsim_object,
@@ -106,6 +107,35 @@ class InjectEngineTestCase(TestCase):
         self.assertTrue(np.isfinite(gain))
         gain_no_mask = infer_gain_from_image(self.exposure, bad_mask_names=[])
         self.assertAlmostEqual(gain, gain_no_mask)
+
+    def test_infer_gain_no_valid_pixels(self):
+        """Test that infer_gain_from_image returns NaN (rather than raising)
+        when a region has no valid pixels to fit.
+        """
+        logger = logging.getLogger(__name__)
+        # Every pixel flagged with a bad mask plane.
+        all_bad = make_test_exposure()
+        all_bad.mask.addMaskPlane("BAD")
+        all_bad.mask.array[:] = all_bad.mask.getPlaneBitMask("BAD")
+        with self.assertLogs(logger, level="WARNING"):
+            gain = infer_gain_from_image(all_bad, bad_mask_names=["BAD"], logger=logger)
+        self.assertTrue(np.isnan(gain))
+
+        # Every variance pixel non-finite.
+        all_nan = make_test_exposure()
+        all_nan.variance.array[:] = np.nan
+        self.assertTrue(np.isnan(infer_gain_from_image(all_nan, bad_mask_names=[])))
+
+    def test_get_gain_map_no_valid_pixels(self):
+        """Test that get_gain_map produces a finite, positive map even when no
+        region can be fit, falling back to unit gain.
+        """
+        all_bad = make_test_exposure()
+        all_bad.mask.addMaskPlane("BAD")
+        all_bad.mask.array[:] = all_bad.mask.getPlaneBitMask("BAD")
+        gain_map = get_gain_map(all_bad, bad_mask_names=["BAD"])
+        self.assertTrue(np.all(np.isfinite(gain_map.array)))
+        self.assertTrue(np.all(gain_map.array > 0))
 
     def test_inject_galsim_objects_into_exposure(self):
         flux0 = np.sum(self.exposure.image.array)

@@ -432,8 +432,23 @@ def infer_gain_from_image(
         bad_mask_bit_mask = mask.getPlaneBitMask(bad_mask_names)
         good &= (mask.array.astype(int) & bad_mask_bit_mask) == 0
 
+    # Check for sufficient points to fit.
+    n_good = int(np.count_nonzero(good))
+    if n_good < 2:
+        if logger:
+            logger.warning("Too few valid pixels (%d) to infer gain from image; returning NaN.", n_good)
+        return float("nan")
+
     fit = np.polyfit(image_arr[good], var_arr[good], deg=1)
-    return 1.0 / fit[0]
+    slope = fit[0]
+    # The gain is 1 / slope, so a non-positive or non-finite slope gives a
+    # non-physical gain. Flag it as NaN rather than propagate a negative,
+    # zero, or infinite gain into the noise model.
+    if not np.isfinite(slope) or slope <= 0:
+        if logger:
+            logger.warning("Inferred a non-physical variance-vs-flux slope (%g); returning NaN gain.", slope)
+        return float("nan")
+    return 1.0 / slope
 
 
 def get_gain_map(
@@ -467,7 +482,35 @@ def get_gain_map(
     if not bboxes:
         bboxes = [full_bbox]
 
-    gains = [infer_gain_from_image(exposure.subset(bbox), bad_mask_names, logger) for bbox in bboxes]
+    gains = np.array(
+        [infer_gain_from_image(exposure.subset(bbox), bad_mask_names, logger) for bbox in bboxes],
+        dtype=float,
+    )
+
+    # Catch unphysical values and replace with fallback values
+    usable = np.isfinite(gains) & (gains > 0)
+    if not np.all(usable):
+        if np.any(usable):
+            # Use the median of the regions that did fit (e.g. the other
+            # amplifiers of the same detector).
+            fallback = float(np.median(gains[usable]))
+        else:
+            # Nothing fit. Try a single fit over the whole exposure (which can
+            # succeed even when individual sub-regions do not), then fall back
+            # to unit gain as a last resort.
+            fallback = 1.0
+            if len(bboxes) > 1:
+                whole = infer_gain_from_image(exposure, bad_mask_names, logger)
+                if np.isfinite(whole) and whole > 0:
+                    fallback = whole
+        if logger:
+            logger.warning(
+                "Could not infer gain for %d of %d region(s); using fallback gain %g.",
+                int(np.count_nonzero(~usable)),
+                len(gains),
+                fallback,
+            )
+        gains[~usable] = fallback
 
     full_bounds = galsim.BoundsI(full_bbox.minX, full_bbox.maxX, full_bbox.minY, full_bbox.maxY)
     gain_map = galsim.Image(full_bounds, dtype=float)

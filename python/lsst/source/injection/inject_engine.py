@@ -597,6 +597,34 @@ def add_noise_to_galsim_image(
     return image_template, var_template
 
 
+def _get_galsim_psf(*, psf, pixel_coords, bbox, calib_flux_radius, galsim_wcs, sky_coords=None):
+    """Compute the galsim PSF at given coordinates within a bbox."""
+    psf_array = None
+    error_args = []
+    try:
+        psf_array = psf.computeKernelImage(pixel_coords).array
+    except InvalidParameterError:
+        # Try mapping to nearest point contained in bbox.
+        contained_point = Point2D(
+            np.clip(pixel_coords.x, bbox.minX, bbox.maxX), np.clip(pixel_coords.y, bbox.minY, bbox.maxY)
+        )
+        if pixel_coords == contained_point:  # no difference, so skip immediately
+            error_args = ["Cannot compute PSF for object at %s; flagging and skipping.", sky_coords]
+        # Otherwise, try again with new point.
+        try:
+            psf_array = psf.computeKernelImage(contained_point).array
+        except InvalidParameterError:
+            error_args = ["Cannot compute PSF for object at %s; flagging and skipping.", sky_coords]
+
+    if psf_array is not None:
+        # Compute the aperture corrected PSF interpolated image.
+        aperture_correction = psf.computeApertureFlux(calib_flux_radius, psf.getAveragePosition())
+        psf_array /= aperture_correction
+        psf_array = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
+
+    return psf_array, error_args
+
+
 def inject_galsim_objects_into_exposure(
     exposure: ExposureF,
     objects: Generator[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
@@ -702,32 +730,20 @@ def inject_galsim_objects_into_exposure(
         if galsim_pixel_scale < pixel_scale / 2 or galsim_pixel_scale > pixel_scale * 2:
             continue
 
-        # Compute the PSF at the object location.
-        try:
-            psf_array = psf.computeKernelImage(pixel_coords).array
-        except InvalidParameterError:
-            # Try mapping to nearest point contained in bbox.
-            contained_point = Point2D(
-                np.clip(pixel_coords.x, bbox.minX, bbox.maxX), np.clip(pixel_coords.y, bbox.minY, bbox.maxY)
-            )
-            if pixel_coords == contained_point:  # no difference, so skip immediately
-                psf_compute_errors[i] = True
-                if logger:
-                    logger.debug("Cannot compute PSF for object at %s; flagging and skipping.", sky_coords)
-                continue
-            # Otherwise, try again with new point.
-            try:
-                psf_array = psf.computeKernelImage(contained_point).array
-            except InvalidParameterError:
-                psf_compute_errors[i] = True
-                if logger:
-                    logger.debug("Cannot compute PSF for object at %s; flagging and skipping.", sky_coords)
-                continue
-
-        # Compute the aperture corrected PSF interpolated image.
-        aperture_correction = psf.computeApertureFlux(calib_flux_radius, psf.getAveragePosition())
-        psf_array /= aperture_correction
-        galsim_psf = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
+        # Get the PSF at the centroid of the object
+        galsim_psf_centroid, aperture_correction, psf_error_args = _get_galsim_psf(
+            psf=psf,
+            pixel_coords=pixel_coords,
+            bbox=bbox,
+            calib_flux_radius=calib_flux_radius,
+            galsim_wcs=galsim_wcs,
+            sky_coords=sky_coords,
+        )
+        if galsim_psf is None:
+            psf_compute_errors[i] = True
+            if logger:
+                logger.debug(*psf_error_args)
+            continue
 
         # Convolve the object with the PSF and generate draw size.
         conv = galsim.Convolve(object, galsim_psf)

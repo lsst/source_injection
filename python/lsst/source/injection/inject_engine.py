@@ -625,6 +625,84 @@ def _get_galsim_psf(*, psf, pixel_coords, bbox, calib_flux_radius, galsim_wcs, s
     return psf_array, error_args
 
 
+def _inject_galsim_object_into_bounds(
+    *,
+    convolved_object,
+    position_d,
+    position_i,
+    object_common_bounds,
+    full_bounds,
+    galsim_image: galsim.Image,
+    galsim_variance: galsim.Image,
+    galsim_wcs,
+    gain_map,
+    exposure,
+    inject_variance: bool,
+    add_noise: bool,
+    noise_seed: int,
+    is_coadd: bool,
+    injection_core_size,
+    mask_plane_name,
+    mask_plane_core_name,
+    logger,
+):
+    common_image = galsim_image[object_common_bounds]
+    common_variance = galsim_variance[object_common_bounds]
+
+    offset = position_d - object_common_bounds.true_center
+    # Note, for preliminary_visit_image injection, pixel is already
+    # part of the PSF and for coadd injection, it's incorrect to
+    # include the output pixel.
+    # So for both cases, we draw using method='no_pixel'.
+    image_template = common_image.copy()
+    image_template = convolved_object.drawImage(
+        image_template, add_to_image=False, offset=offset, wcs=galsim_wcs, method="no_pixel"
+    )
+
+    # The amount of additional variance to inject,
+    # if inject_variance is true.
+    var_template = image_template.copy()
+    var_template *= gain_map[object_common_bounds]
+
+    if add_noise:
+        image_template, var_template = add_noise_to_galsim_image(
+            image_template,
+            var_template,
+            is_coadd,
+            gain_map,
+            object_common_bounds,
+            noise_seed,
+            logger,
+        )
+
+    common_image += image_template
+    if inject_variance:
+        common_variance += var_template
+
+    # Increment the seed so different noise is generated for different
+    # objects.
+    noise_seed += 1
+
+    common_box = Box2I(
+        Point2I(object_common_bounds.xmin, object_common_bounds.ymin),
+        Point2I(object_common_bounds.xmax, object_common_bounds.ymax),
+    )
+    bitvalue = exposure.mask.getPlaneBitMask(mask_plane_name)
+    exposure[common_box].mask.array |= bitvalue
+    # Add a configurable pixel mask centered on the object. The mask must be
+    # large enough to always identify the core/peak of the injected
+    # source, but small enough that it rarely overlaps real sources.
+    sub_bounds_core = galsim.BoundsI(position_i).withBorder(injection_core_size // 2)
+    object_common_bounds_core = full_bounds & sub_bounds_core
+    if object_common_bounds_core.area() > 0:
+        common_box_core = Box2I(
+            Point2I(object_common_bounds_core.xmin, object_common_bounds_core.ymin),
+            Point2I(object_common_bounds_core.xmax, object_common_bounds_core.ymax),
+        )
+        bitvalue_core = exposure.mask.getPlaneBitMask(mask_plane_core_name)
+        exposure[common_box_core].mask.array |= bitvalue_core
+
+
 def inject_galsim_objects_into_exposure(
     exposure: ExposureF,
     objects: Generator[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
@@ -776,18 +854,26 @@ def inject_galsim_objects_into_exposure(
 
         # Inject the source if there is any overlap.
         if object_common_bounds.area() > 0:
-            common_image = galsim_image[object_common_bounds]
-            common_variance = galsim_variance[object_common_bounds]
-
-            offset = posd - object_common_bounds.true_center
-            # Note, for preliminary_visit_image injection, pixel is already
-            # part of the PSF and for coadd injection, it's incorrect to
-            # include the output pixel.
-            # So for both cases, we draw using method='no_pixel'.
-            image_template = common_image.copy()
             try:
-                image_template = conv.drawImage(
-                    image_template, add_to_image=False, offset=offset, wcs=galsim_wcs, method="no_pixel"
+                _inject_galsim_object_into_bounds(
+                    convolved_object=conv,
+                    position_d=posd,
+                    position_i=posi,
+                    object_common_bounds=object_common_bounds,
+                    full_bounds=full_bounds,
+                    galsim_image=galsim_image,
+                    galsim_variance=galsim_variance,
+                    galsim_wcs=galsim_wcs,
+                    gain_map=gain_map,
+                    exposure=exposure,
+                    inject_variance=inject_variance,
+                    add_noise=add_noise,
+                    noise_seed=noise_seed,
+                    is_coadd=is_coadd,
+                    injection_core_size=injection_core_size,
+                    mask_plane_name=mask_plane_name,
+                    mask_plane_core_name=mask_plane_core_name,
+                    logger=logger,
                 )
             except GalSimFFTSizeError as err:
                 fft_size_errors[i] = True
@@ -798,49 +884,6 @@ def inject_galsim_objects_into_exposure(
                         err,
                     )
                 continue
-
-            # The amount of additional variance to inject,
-            # if inject_variance is true.
-            var_template = image_template.copy()
-            var_template *= gain_map[object_common_bounds]
-
-            if add_noise:
-                image_template, var_template = add_noise_to_galsim_image(
-                    image_template,
-                    var_template,
-                    is_coadd,
-                    gain_map,
-                    object_common_bounds,
-                    noise_seed,
-                    logger,
-                )
-
-            common_image += image_template
-            if inject_variance:
-                common_variance += var_template
-
-            # Increment the seed so different noise is generated for different
-            # objects.
-            noise_seed += 1
-
-            common_box = Box2I(
-                Point2I(object_common_bounds.xmin, object_common_bounds.ymin),
-                Point2I(object_common_bounds.xmax, object_common_bounds.ymax),
-            )
-            bitvalue = exposure.mask.getPlaneBitMask(mask_plane_name)
-            exposure[common_box].mask.array |= bitvalue
-            # Add a 3 x 3 pixel mask centered on the object. The mask must be
-            # large enough to always identify the core/peak of the injected
-            # source, but small enough that it rarely overlaps real sources.
-            sub_bounds_core = galsim.BoundsI(posi).withBorder(injection_core_size // 2)
-            object_common_bounds_core = full_bounds & sub_bounds_core
-            if object_common_bounds_core.area() > 0:
-                common_box_core = Box2I(
-                    Point2I(object_common_bounds_core.xmin, object_common_bounds_core.ymin),
-                    Point2I(object_common_bounds_core.xmax, object_common_bounds_core.ymax),
-                )
-                bitvalue_core = exposure.mask.getPlaneBitMask(mask_plane_core_name)
-                exposure[common_box_core].mask.array |= bitvalue_core
         else:
             if logger:
                 logger.debug("No area overlap for object at %s; flagging and skipping.", sky_coords)

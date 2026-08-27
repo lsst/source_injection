@@ -29,6 +29,7 @@ from collections.abc import Generator
 from typing import Any
 
 import galsim
+import galsim.errors as galsim_errors
 import numpy as np
 import numpy.ma as ma
 from astropy.io import fits
@@ -38,7 +39,12 @@ from galsim import GalSimFFTSizeError
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import ExposureF, PhotoCalib
 from lsst.geom import Box2I, Point2D, Point2I, SpherePoint, arcseconds, degrees
+from lsst.images import BoundsError
+from lsst.images.cells import CellCoadd, CellIJ
 from lsst.pex.exceptions import InvalidParameterError, LogicError
+
+# This is off by default but we want it on since we catch the error
+galsim_errors.raise_fft_size_error = True
 
 
 def get_object_data(source_data: dict[str, Any], object_class: galsim.GSObject) -> dict[str, Any]:
@@ -618,6 +624,7 @@ def _get_galsim_psf(*, psf, pixel_coords, bbox, calib_flux_radius, galsim_wcs, s
 
     if psf_array is not None:
         # Compute the aperture corrected PSF interpolated image.
+        # TODO: Review whether we want to at least make this optional
         aperture_correction = psf.computeApertureFlux(calib_flux_radius, psf.getAveragePosition())
         psf_array /= aperture_correction
         psf_array = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
@@ -679,10 +686,6 @@ def _inject_galsim_object_into_bounds(
     if inject_variance:
         common_variance += var_template
 
-    # Increment the seed so different noise is generated for different
-    # objects.
-    noise_seed += 1
-
     common_box = Box2I(
         Point2I(object_common_bounds.xmin, object_common_bounds.ymin),
         Point2I(object_common_bounds.xmax, object_common_bounds.ymax),
@@ -704,7 +707,7 @@ def _inject_galsim_object_into_bounds(
 
 
 def inject_galsim_objects_into_exposure(
-    exposure: ExposureF,
+    exposure: ExposureF | CellCoadd,
     objects: Generator[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
     mask_plane_name: str = "INJECTED",
     calib_flux_radius: float = 12.0,
@@ -719,7 +722,7 @@ def inject_galsim_objects_into_exposure(
 
     Parameters
     ----------
-    exposure : `lsst.afw.image.ExposureF`
+    exposure : `lsst.afw.image.ExposureF` or `lsst.images.cells.CellCoadd`
         The exposure to inject synthetic sources into.
     objects : `Generator` [`tuple`, None, None]
         An iterator of tuples that contains (or generates) locations and object
@@ -763,25 +766,62 @@ def inject_galsim_objects_into_exposure(
     psf_compute_errors : `list` [`bool`]
         Boolean flags indicating whether a PSF computation error was raised.
     """
+    is_cell = isinstance(exposure, CellCoadd)
+    if not is_cell and not isinstance(exposure, ExposureF):
+        raise TypeError(f"Unsupported {type(exposure)=}")
+    if is_cell:
+        cell_coadd = exposure
+        psf = exposure.psf
+        exposure = cell_coadd.to_legacy()
+        is_coadd = True
+    else:
+        is_coadd = exposure.info.getCoaddInputs() is not None
+
     exposure.mask.addMaskPlane(mask_plane_name)
     mask_plane_core_name = mask_plane_name + "_CORE"
     exposure.mask.addMaskPlane(mask_plane_core_name)
+    wcs = exposure.getWcs()
+    bbox = exposure.getBBox()
     if logger:
         logger.info(
             "Adding %s and %s mask planes to the exposure.",
             mask_plane_name,
             mask_plane_core_name,
         )
-    psf = exposure.getPsf()
-    wcs = exposure.getWcs()
-    bbox = exposure.getBBox()
     full_bounds = galsim.BoundsI(bbox.minX, bbox.maxX, bbox.minY, bbox.maxY)
     galsim_image = galsim.Image(exposure.image.array, bounds=full_bounds)
     galsim_variance = galsim.Image(exposure.variance.array, bounds=full_bounds)
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
+    if is_cell:
+        all_bounds = []
+        cell_grid = cell_coadd.grid
+        n_i, n_j = cell_grid.grid_size.as_tuple()
+
+        fallback_psf = None
+
+        # Iterate over all cells and find the ones with good PSFs
+        for cell_i in range(n_i):
+            for cell_j in range(n_j):
+                cell_ij = CellIJ(cell_i, cell_j)
+                bbox_cell = cell_grid.bbox_of(cell_ij)
+                cen_bbox = bbox_cell.to_legacy().getCenter()
+                cen_x, cen_y = cen_bbox
+                try:
+                    psf_array = cell_coadd.psf.compute_kernel_image(x=cen_x, y=cen_y)
+                    all_bounds.append((bbox_cell, (cell_ij, cen_x, cen_y)))
+                    if fallback_psf is None:
+                        mat = wcs.linearizePixelToSky(cen_bbox).getMatrix()
+                        galsim_wcs = galsim.JacobianWCS(mat[0, 0], mat[0, 1], mat[1, 0], mat[1, 1])
+                        fallback_psf = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
+                except BoundsError:
+                    # Assume this cell has a bad PSF/data and give up
+                    pass
+    else:
+        all_bounds = [(full_bounds, None)]
+
+    # TODO: Refactor to not take exposure?
     gain_map = get_gain_map(exposure, bad_mask_names, logger)
-    is_coadd = exposure.info.getCoaddInputs() is not None
 
     draw_sizes: list[int] = []
     common_bounds: list[galsim.BoundsI] = []
@@ -809,7 +849,7 @@ def inject_galsim_objects_into_exposure(
             continue
 
         # Get the PSF at the centroid of the object
-        galsim_psf_centroid, aperture_correction, psf_error_args = _get_galsim_psf(
+        galsim_psf_centroid, psf_error_args = _get_galsim_psf(
             psf=psf,
             pixel_coords=pixel_coords,
             bbox=bbox,
@@ -817,14 +857,27 @@ def inject_galsim_objects_into_exposure(
             galsim_wcs=galsim_wcs,
             sky_coords=sky_coords,
         )
-        if galsim_psf is None:
-            psf_compute_errors[i] = True
-            if logger:
-                logger.debug(*psf_error_args)
-            continue
+        # Get the fallback PSF (if available) to compute the injection box.
+        # Even if the PSF at the centroid of an object is not valid, nearby
+        # cells might be fine. For example, cells with saturated stars can
+        # end up with no visits below the masked pixel threshold and no PSF.
+        #
+        # Note that _get_galsim_psf already implements a fallback of getting
+        # the PSF at the nearest edge of the bbox for objects whose centroids
+        # land outside the exposure's bbox. Non-cell coadds and visits could
+        # also do something similar by searching for the nearest valid PSF,
+        # but that's not as trivial as picking an "average" cell.
+        if galsim_psf_centroid is None:
+            if is_cell:
+                galsim_psf_centroid, psf_error_args = fallback_psf, []
+            else:
+                psf_compute_errors[i] = True
+                if logger:
+                    logger.debug(*psf_error_args)
+                continue
 
         # Convolve the object with the PSF and generate draw size.
-        conv = galsim.Convolve(object, galsim_psf)
+        conv = galsim.Convolve(object, galsim_psf_centroid)
         if draw_size == 0:
             draw_size = conv.getGoodImageSize(galsim_wcs.minLinearScale())  # type: ignore
         injection_draw_size = int(draw_size)
@@ -849,43 +902,61 @@ def inject_galsim_objects_into_exposure(
                 )
             injection_core_size = injection_draw_size
         sub_bounds = galsim.BoundsI(posi).withBorder(injection_draw_size // 2)
-        object_common_bounds = full_bounds & sub_bounds
-        common_bounds[i] = object_common_bounds  # type: ignore
 
-        # Inject the source if there is any overlap.
-        if object_common_bounds.area() > 0:
-            try:
-                _inject_galsim_object_into_bounds(
-                    convolved_object=conv,
-                    position_d=posd,
-                    position_i=posi,
-                    object_common_bounds=object_common_bounds,
-                    full_bounds=full_bounds,
-                    galsim_image=galsim_image,
-                    galsim_variance=galsim_variance,
-                    galsim_wcs=galsim_wcs,
-                    gain_map=gain_map,
-                    exposure=exposure,
-                    inject_variance=inject_variance,
-                    add_noise=add_noise,
-                    noise_seed=noise_seed,
-                    is_coadd=is_coadd,
-                    injection_core_size=injection_core_size,
-                    mask_plane_name=mask_plane_name,
-                    mask_plane_core_name=mask_plane_core_name,
-                    logger=logger,
-                )
-            except GalSimFFTSizeError as err:
-                fft_size_errors[i] = True
-                if logger:
-                    logger.debug(
-                        "GalSimFFTSizeError raised for object at %s; flagging and skipping.\n%s",
-                        sky_coords,
-                        err,
+        # These bounds may not be the same as what would be derived from
+        # per-cell PSFs for large objects, but re-calculating them for every
+        # cell is not worthwhile
+        if is_cell:
+            object_common_bounds = full_bounds & sub_bounds
+            if object_common_bounds.area() > 0:
+                common_bounds[i] = object_common_bounds  # type: ignore
+
+        area_to_inject = 0
+        area_injected = 0
+        bounds_fft_size_errors = {}
+        for idx_bound, (injection_bounds, bounds_info) in enumerate(all_bounds):
+            object_common_bounds = injection_bounds & sub_bounds
+
+            # Inject the source if there is any overlap.
+            if (common_area := object_common_bounds.area()) > 0:
+                area_to_inject += common_area
+                if not is_cell:
+                    common_bounds[i] = object_common_bounds  # type: ignore
+                try:
+                    _inject_galsim_object_into_bounds(
+                        convolved_object=conv,
+                        position_d=posd,
+                        position_i=posi,
+                        object_common_bounds=object_common_bounds,
+                        full_bounds=full_bounds,
+                        galsim_image=galsim_image,
+                        galsim_variance=galsim_variance,
+                        galsim_wcs=galsim_wcs,
+                        gain_map=gain_map,
+                        exposure=exposure,
+                        inject_variance=inject_variance,
+                        add_noise=add_noise,
+                        noise_seed=noise_seed,
+                        is_coadd=is_coadd,
+                        injection_core_size=injection_core_size,
+                        mask_plane_name=mask_plane_name,
+                        mask_plane_core_name=mask_plane_core_name,
+                        logger=logger,
                     )
-                continue
-        else:
+                    area_injected += 0
+                except GalSimFFTSizeError as err:
+                    bounds_fft_size_errors[idx_bound] = err.size
+        if logger and (area_to_inject == 0):
+            logger.debug("No area overlap for object at %s; flagging and skipping.", sky_coords)
+        if bounds_fft_size_errors:
+            fft_size_errors[i] = True
             if logger:
-                logger.debug("No area overlap for object at %s; flagging and skipping.", sky_coords)
+                logger.debug(
+                    "GalSimFFTSizeError raised for object at index=%d and coords %s;"
+                    " flagging and skipping.\nbounds_fft_size_errors=%s",
+                    i,
+                    sky_coords,
+                    bounds_fft_size_errors,
+                )
 
     return draw_sizes, common_bounds, fft_size_errors, psf_compute_errors

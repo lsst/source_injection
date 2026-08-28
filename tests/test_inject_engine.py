@@ -29,6 +29,8 @@ from galsim import BoundsI, GSObject
 
 import lsst.utils.tests
 from lsst.geom import Point2D, SpherePoint, degrees
+from lsst.images import YX
+from lsst.images.cells import CellIJ
 from lsst.source.injection.inject_engine import (
     generate_galsim_objects,
     get_gain_map,
@@ -36,7 +38,11 @@ from lsst.source.injection.inject_engine import (
     inject_galsim_objects_into_exposure,
     make_galsim_object,
 )
-from lsst.source.injection.utils.test_utils import make_test_exposure, make_test_injection_catalog
+from lsst.source.injection.utils.test_utils import (
+    make_test_cell_coadd,
+    make_test_exposure,
+    make_test_injection_catalog,
+)
 from lsst.utils.tests import TestCase
 
 
@@ -51,6 +57,13 @@ class InjectEngineTestCase(TestCase):
         GalSim objects intended for injection.
         """
         self.exposure = make_test_exposure()
+        self.cell_coadd = make_test_cell_coadd(
+            exposure=self.exposure,
+            cell_shape=YX(x=35, y=35),
+            psf_shape=(33, 33),
+            missing={CellIJ(1, 1)},
+            band="r",
+        )
         self.injection_catalog = make_test_injection_catalog(
             self.exposure.getWcs(),
             self.exposure.getBBox(),
@@ -65,6 +78,7 @@ class InjectEngineTestCase(TestCase):
 
     def tearDown(self):
         del self.exposure
+        del self.cell_coadd
         del self.injection_catalog
         del self.galsim_objects
 
@@ -137,10 +151,16 @@ class InjectEngineTestCase(TestCase):
         self.assertTrue(np.all(np.isfinite(gain_map.array)))
         self.assertTrue(np.all(gain_map.array > 0))
 
+    def test_inject_galsim_objects_into_cell_coadd(self):
+        self._test_inject_galsim_objects_into_exposure(self.cell_coadd, True)
+
     def test_inject_galsim_objects_into_exposure(self):
-        flux0 = np.sum(self.exposure.image.array)
+        self._test_inject_galsim_objects_into_exposure(self.exposure, False)
+
+    def _test_inject_galsim_objects_into_exposure(self, exposure, is_cell: bool = True):
+        flux0 = np.sum(exposure.image.array)
         injected_outputs = inject_galsim_objects_into_exposure(
-            exposure=self.exposure,
+            exposure=exposure,
             objects=self.galsim_objects,
             mask_plane_name="INJECTED",
             calib_flux_radius=12.0,
@@ -150,7 +170,7 @@ class InjectEngineTestCase(TestCase):
         pc = self.exposure.getPhotoCalib()
         inst_fluxes = [float(pc.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]]
         self.assertAlmostEqual(
-            np.sum(self.exposure.image.array) - flux0,
+            np.sum(exposure.image.array) - flux0,
             np.sum(inst_fluxes),
             delta=0.00015 * np.sum(inst_fluxes),
         )

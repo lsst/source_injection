@@ -771,7 +771,7 @@ def inject_galsim_objects_into_exposure(
         raise TypeError(f"Unsupported {type(exposure)=}")
     if is_cell:
         cell_coadd = exposure
-        psf = exposure.psf
+        cell_psf = exposure.psf
         exposure = cell_coadd.to_legacy()
         is_coadd = True
     else:
@@ -782,6 +782,7 @@ def inject_galsim_objects_into_exposure(
     exposure.mask.addMaskPlane(mask_plane_core_name)
     wcs = exposure.getWcs()
     bbox = exposure.getBBox()
+    psf = exposure.getPsf()
     if logger:
         logger.info(
             "Adding %s and %s mask planes to the exposure.",
@@ -808,10 +809,16 @@ def inject_galsim_objects_into_exposure(
                 cen_bbox = bbox_cell.to_legacy().getCenter()
                 cen_x, cen_y = cen_bbox
                 try:
-                    psf_array = cell_coadd.psf.compute_kernel_image(x=cen_x, y=cen_y)
-                    all_bounds.append((bbox_cell, (cell_ij, cen_x, cen_y)))
+                    psf_array = cell_psf.compute_kernel_image(x=cen_x, y=cen_y).array
+                    bounds_cell = galsim.BoundsI(
+                        bbox_cell.min.x,
+                        bbox_cell.max.x,
+                        bbox_cell.min.y,
+                        bbox_cell.max.y,
+                    )
+                    all_bounds.append((bounds_cell, (cell_ij, cen_x, cen_y)))
                     if fallback_psf is None:
-                        mat = wcs.linearizePixelToSky(cen_bbox).getMatrix()
+                        mat = wcs.linearizePixelToSky(cen_bbox, arcseconds).getMatrix()
                         galsim_wcs = galsim.JacobianWCS(mat[0, 0], mat[0, 1], mat[1, 0], mat[1, 1])
                         fallback_psf = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
                 except BoundsError:

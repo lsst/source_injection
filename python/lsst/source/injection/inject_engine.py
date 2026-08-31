@@ -624,6 +624,10 @@ def _get_galsim_psf(*, psf, pixel_coords, bbox, calib_flux_radius, galsim_wcs, s
 
     if psf_array is not None:
         # Compute the aperture corrected PSF interpolated image.
+        # Normalize first
+        # TODO: Should also deal with negative pixel values here as they are
+        # not valid for a PSF.
+        psf_array /= np.sum(psf_array)
         # TODO: Review whether we want to at least make this optional
         aperture_correction = psf.computeApertureFlux(calib_flux_radius, psf.getAveragePosition())
         psf_array /= aperture_correction

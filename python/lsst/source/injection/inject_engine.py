@@ -37,10 +37,12 @@ from astropy.io import fits
 from astropy.table import Table
 from galsim import GalSimFFTSizeError
 
+import lsst.afw.detection as afwDetection
 from lsst.afw.geom import SkyWcs
 from lsst.afw.image import ExposureF, PhotoCalib
 from lsst.geom import Box2I, Point2D, Point2I, SpherePoint, arcseconds, degrees
-from lsst.images import BoundsError
+from lsst.images import BoundsError, MaskPlane
+from lsst.images._mask import _guess_legacy_plane_map
 from lsst.images.cells import CellCoadd, CellIJ
 from lsst.pex.exceptions import InvalidParameterError, LogicError
 
@@ -604,9 +606,43 @@ def add_noise_to_galsim_image(
     return image_template, var_template
 
 
-def _get_galsim_psf(*, psf, pixel_coords, bbox, calib_flux_radius, galsim_wcs, sky_coords=None):
-    """Compute the galsim PSF at given coordinates within a bbox."""
-    psf_array = None
+def _get_galsim_psf(
+    *,
+    psf: afwDetection.Psf,
+    pixel_coords: Point2D,
+    bbox: Box2I,
+    calib_flux_radius: float,
+    galsim_wcs: galsim.JacobianWCS,
+    sky_coords: SpherePoint | None = None,
+    apply_aperture_correction: bool = True,
+):
+    """Return the GalSim PSF at given coordinates within a bbox.
+
+    Parameters
+    ----------
+    psf
+        The coadd PSF object to evaluate the PSF with.
+    pixel_coords
+        The pixel coordinates to get the PSF for.
+    bbox
+        A bounding box to search for an alternative PSF for. If pixel_coords
+        lies outside the box and PSF evaluation fails, it will retry using the
+        nearest point to pixel_coords within the box.
+    calib_flux_radius
+        The radius to use to compute the aperture flux.
+    galsim_wcs
+        The GalSim WCS to pass to the `galsim.InterpolatedImage` constructor.
+    sky_coords
+        The sky coordinates of pixel_coords. Only used for
+    apply_aperture_correction
+        If True, the PSF values will be divided by the aperture flux at the
+        average position of psf.
+
+    Returns
+    -------
+    galsim_psf
+        The GalSim PSF as a `galsim.InterpolatedImage`.
+    """
     error_args = []
     try:
         psf_array = psf.computeKernelImage(pixel_coords).array
@@ -622,19 +658,20 @@ def _get_galsim_psf(*, psf, pixel_coords, bbox, calib_flux_radius, galsim_wcs, s
             psf_array = psf.computeKernelImage(contained_point).array
         except InvalidParameterError:
             error_args = ["Cannot compute PSF for object at %s; flagging and skipping.", sky_coords]
+            return None, error_args
 
-    if psf_array is not None:
-        # Compute the aperture corrected PSF interpolated image.
-        # Normalize first
-        # TODO: Should also deal with negative pixel values here as they are
-        # not valid for a PSF.
-        psf_array /= np.sum(psf_array)
+    # Compute the aperture corrected PSF interpolated image.
+    # Normalize first
+    # TODO: Should also deal with negative pixel values here as they are
+    # not valid for a PSF.
+    psf_array /= np.sum(psf_array)
+    if apply_aperture_correction:
         # TODO: Review whether we want to at least make this optional
         aperture_correction = psf.computeApertureFlux(calib_flux_radius, psf.getAveragePosition())
         psf_array /= aperture_correction
-        psf_array = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
+    galsim_psf = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
 
-    return psf_array, error_args
+    return galsim_psf, error_args
 
 
 def _inject_galsim_object_into_bounds(
@@ -787,7 +824,7 @@ def inject_galsim_objects_into_exposure(
 
     if is_cell:
         cell_coadd = exposure
-        cell_psf = exposure.psf
+        cell_psf = cell_coadd.psf
         exposure = cell_coadd.to_legacy()
         is_coadd = True
     else:
@@ -811,7 +848,7 @@ def inject_galsim_objects_into_exposure(
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
     if is_cell:
-        all_bounds = []
+        all_bounds: list[tuple[galsim.BoundsI, galsim.InterpolatedImage | None]] = []
         cell_grid = cell_coadd.grid
         n_i, n_j = cell_grid.grid_size.as_tuple()
 
@@ -822,23 +859,32 @@ def inject_galsim_objects_into_exposure(
             for cell_j in range(n_j):
                 cell_ij = CellIJ(cell_i, cell_j)
                 bbox_cell = cell_grid.bbox_of(cell_ij)
-                cen_bbox = bbox_cell.to_legacy().getCenter()
+                bbox_cell_legacy = bbox_cell.to_legacy()
+                cen_bbox = bbox_cell_legacy.getCenter()
                 cen_x, cen_y = cen_bbox
                 try:
-                    psf_array = cell_psf.compute_kernel_image(x=cen_x, y=cen_y).array
+                    if cell_ij in cell_coadd.bounds.missing:
+                        continue
+                    galsim_psf = cell_psf.compute_kernel_image(x=cen_x, y=cen_y).array
+                    mat = wcs.linearizePixelToSky(wcs.pixelToSky(x=cen_x, y=cen_y), arcseconds).getMatrix()
+                    galsim_wcs = galsim.JacobianWCS(mat[0, 0], mat[0, 1], mat[1, 0], mat[1, 1])
+                    aperture_correction = psf.computeApertureFlux(calib_flux_radius, cen_bbox)
+                    galsim_psf = galsim.InterpolatedImage(
+                        galsim.Image(galsim_psf / (np.sum(galsim_psf) * aperture_correction)),
+                        wcs=galsim_wcs,
+                    )
                     bounds_cell = galsim.BoundsI(
                         bbox_cell.min.x,
                         bbox_cell.max.x,
                         bbox_cell.min.y,
                         bbox_cell.max.y,
                     )
-                    all_bounds.append((bounds_cell, (cell_ij, cen_x, cen_y)))
+                    all_bounds.append((bounds_cell, galsim_psf))
                     if fallback_psf is None:
-                        mat = wcs.linearizePixelToSky(cen_bbox, arcseconds).getMatrix()
-                        galsim_wcs = galsim.JacobianWCS(mat[0, 0], mat[0, 1], mat[1, 0], mat[1, 1])
-                        fallback_psf = galsim.InterpolatedImage(galsim.Image(psf_array), wcs=galsim_wcs)
+                        fallback_psf = galsim_psf
                 except BoundsError:
-                    # Assume this cell has a bad PSF/data and give up
+                    # TODO: Should this ever happen? If it does, it probably
+                    # means that cell_coadd.bounds.missing is wrong.
                     pass
     else:
         all_bounds = [(full_bounds, None)]
@@ -937,13 +983,17 @@ def inject_galsim_objects_into_exposure(
         area_to_inject = 0
         area_injected = 0
         bounds_fft_size_errors = {}
-        for idx_bound, (injection_bounds, bounds_info) in enumerate(all_bounds):
+        for idx_bound, (injection_bounds, galsim_psf_bounds) in enumerate(all_bounds):
             object_common_bounds = injection_bounds & sub_bounds
 
             # Inject the source if there is any overlap.
             if (common_area := object_common_bounds.area()) > 0:
                 area_to_inject += common_area
-                if not is_cell:
+                if is_cell:
+                    # Use the per-cell PSF
+                    assert galsim_psf_bounds is not None
+                    conv = galsim.Convolve(object, galsim_psf_bounds)
+                else:
                     common_bounds[i] = object_common_bounds  # type: ignore
                 try:
                     _inject_galsim_object_into_bounds(
@@ -982,4 +1032,27 @@ def inject_galsim_objects_into_exposure(
                     bounds_fft_size_errors,
                 )
 
+    # lsst.images and afw masks are incompatible due to dtypes alone, and so
+    # they have to be converted explicitly (also to add plane descriptions)
+    if is_cell:
+        plane_map = _guess_legacy_plane_map(exposure.mask.getMaskPlaneDict())
+        plane_map.update(
+            {
+                mask_plane_name: MaskPlane(
+                    name=mask_plane_name,
+                    description="Pixel had at least one source injected over it",
+                ),
+                mask_plane_core_name: MaskPlane(
+                    name=mask_plane_core_name,
+                    description=f"Pixel center is within the core region"
+                    f" ({injection_core_size}x{injection_core_size} box) of an injected source",
+                ),
+            }
+        )
+        converted = cell_coadd.mask.from_legacy(
+            exposure.mask,
+            plane_map=plane_map,
+            sky_projection=cell_coadd.sky_projection,
+        )
+        cell_coadd.mask = converted
     return draw_sizes, common_bounds, fft_size_errors, psf_compute_errors

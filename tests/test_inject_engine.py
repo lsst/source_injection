@@ -25,6 +25,7 @@ from types import GeneratorType
 
 import galsim
 import numpy as np
+import pytest
 from galsim import BoundsI, GSObject
 
 import lsst.utils.tests
@@ -159,6 +160,13 @@ class InjectEngineTestCase(TestCase):
 
     def _test_inject_galsim_objects_into_exposure(self, exposure, is_cell: bool = True):
         flux0 = np.sum(exposure.image.array)
+        for injection_core_size in (None, 0, 1.5):
+            with pytest.raises(ValueError):
+                inject_galsim_objects_into_exposure(
+                    exposure=exposure,
+                    objects=(),
+                    injection_core_size=injection_core_size,
+                )
         injected_outputs = inject_galsim_objects_into_exposure(
             exposure=exposure,
             objects=self.galsim_objects,
@@ -166,6 +174,7 @@ class InjectEngineTestCase(TestCase):
             calib_flux_radius=12.0,
             draw_size_max=1000,
             add_noise=False,
+            injection_core_size=5,
         )
         pc = self.exposure.getPhotoCalib()
         inst_fluxes = [float(pc.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]]

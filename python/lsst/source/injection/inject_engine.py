@@ -23,6 +23,7 @@ from __future__ import annotations
 
 __all__ = ["generate_galsim_objects", "inject_galsim_objects_into_exposure"]
 
+import numbers
 import os
 from collections import Counter
 from collections.abc import Generator
@@ -720,6 +721,7 @@ def inject_galsim_objects_into_exposure(
     add_noise: bool = True,
     noise_seed: int = 0,
     bad_mask_names: list[str] | None = None,
+    injection_core_size: int = 3,
     logger: Any | None = None,
 ) -> tuple[list[int], list[galsim.BoundsI], list[bool], list[bool]]:
     """Inject sources into given exposure using GalSim.
@@ -752,6 +754,9 @@ def inject_galsim_objects_into_exposure(
         Seed for generating the noise of the first injected object. The seed
         actually used increases by 1 for each subsequent object, to ensure
         independent noise realizations.
+    injection_core_size : `int`
+        Size of the box around each injected source to mark in the injected
+        core mask. The value must be a positive odd integer.
     bad_mask_names : `list[str]`, optional
         List of mask plane names indicating pixels to ignore when fitting flux
         vs variance in preparation for variance plane modification. If None,
@@ -773,6 +778,13 @@ def inject_galsim_objects_into_exposure(
     is_cell = isinstance(exposure, CellCoadd)
     if not is_cell and not isinstance(exposure, ExposureF):
         raise TypeError(f"Unsupported {type(exposure)=}")
+    if (
+        not isinstance(injection_core_size, numbers.Number)
+        or not (injection_core_size >= 1)
+        or not (injection_core_size % 2 == 1)
+    ):
+        raise ValueError(f"{injection_core_size=} must be a positive odd integer")
+
     if is_cell:
         cell_coadd = exposure
         cell_psf = exposure.psf
@@ -892,7 +904,7 @@ def inject_galsim_objects_into_exposure(
         if draw_size == 0:
             draw_size = conv.getGoodImageSize(galsim_wcs.minLinearScale())  # type: ignore
         injection_draw_size = int(draw_size)
-        injection_core_size = 3
+        injection_core_size_obj = injection_core_size
         if draw_size_max > 0 and injection_draw_size > draw_size_max:
             if logger:
                 logger.warning(
@@ -903,15 +915,15 @@ def inject_galsim_objects_into_exposure(
                 )
             injection_draw_size = draw_size_max
         draw_sizes[i] = injection_draw_size
-        if injection_core_size > injection_draw_size:
+        if injection_core_size_obj > injection_draw_size:
             if logger:
                 logger.debug(
                     "Clipping core size for object at %s from %d to %d pixels.",
                     sky_coords,
-                    injection_core_size,
+                    injection_core_size_obj,
                     injection_draw_size,
                 )
-            injection_core_size = injection_draw_size
+            injection_core_size_obj = injection_draw_size
         sub_bounds = galsim.BoundsI(posi).withBorder(injection_draw_size // 2)
 
         # These bounds may not be the same as what would be derived from
@@ -949,7 +961,7 @@ def inject_galsim_objects_into_exposure(
                         add_noise=add_noise,
                         noise_seed=noise_seed,
                         is_coadd=is_coadd,
-                        injection_core_size=injection_core_size,
+                        injection_core_size=injection_core_size_obj,
                         mask_plane_name=mask_plane_name,
                         mask_plane_core_name=mask_plane_core_name,
                         logger=logger,

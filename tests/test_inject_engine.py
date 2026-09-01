@@ -58,17 +58,33 @@ class InjectEngineTestCase(TestCase):
         GalSim objects intended for injection.
         """
         self.exposure = make_test_exposure()
+        # Mark a cell as missing to test that it's ignored, although the data
+        # in it may still actually be fine
+        self.cell_bad = CellIJ(1, 1)
         self.cell_coadd = make_test_cell_coadd(
             exposure=self.exposure,
             cell_shape=YX(x=35, y=35),
             psf_shape=(33, 33),
-            missing={CellIJ(1, 1)},
+            missing={self.cell_bad},
             band="r",
         )
         self.injection_catalog = make_test_injection_catalog(
             self.exposure.getWcs(),
             self.exposure.getBBox(),
         )
+        cen_cell_bad = self.exposure.wcs.pixelToSky(
+            self.cell_coadd.grid.bbox_of(CellIJ(1, 1)).to_legacy().getCenter()
+        )
+        row_last = self.injection_catalog[-1]
+        self.injection_catalog.add_row(
+            {
+                "ra": cen_cell_bad.getRa().asDegrees(),
+                "dec": cen_cell_bad.getDec().asDegrees(),
+                "mag": row_last["mag"],
+                "source_type": row_last["source_type"],
+            }
+        )
+
         self.galsim_objects = generate_galsim_objects(
             injection_catalog=self.injection_catalog,
             photo_calib=self.exposure.photoCalib,
@@ -76,12 +92,18 @@ class InjectEngineTestCase(TestCase):
             fits_alignment="wcs",
             stamp_prefix="",
         )
+        self.photoCalib = self.exposure.getPhotoCalib()
+        self.inst_fluxes = [
+            float(self.photoCalib.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]
+        ]
 
     def tearDown(self):
         del self.exposure
         del self.cell_coadd
         del self.injection_catalog
         del self.galsim_objects
+        del self.photoCalib
+        del self.inst_fluxes
 
     def test_make_galsim_object(self):
         source_data = self.injection_catalog[0]
@@ -176,19 +198,26 @@ class InjectEngineTestCase(TestCase):
             add_noise=False,
             injection_core_size=5,
         )
-        pc = self.exposure.getPhotoCalib()
-        inst_fluxes = [float(pc.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]]
+        draw_sizes, common_bounds, fft_size_errors, psf_compute_errors = injected_outputs
         self.assertAlmostEqual(
             np.sum(exposure.image.array) - flux0,
-            np.sum(inst_fluxes),
-            delta=0.00015 * np.sum(inst_fluxes),
+            np.sum(self.inst_fluxes),
+            delta=0.00015 * np.sum(self.inst_fluxes),
         )
-        self.assertEqual(len(injected_outputs[0]), len(self.injection_catalog["ra"]))
+        self.assertEqual(len(draw_sizes), len(self.injection_catalog["ra"]))
         self.assertTrue(all(isinstance(injected_output, list) for injected_output in injected_outputs))
-        self.assertTrue(all(isinstance(item, int) for item in injected_outputs[0]))  # draw sizes
-        self.assertTrue(all(isinstance(item, BoundsI) for item in injected_outputs[1]))  # common bounds
-        self.assertTrue(all(isinstance(item, bool) for item in injected_outputs[2]))  # FFT size errors
-        self.assertTrue(all(isinstance(item, bool) for item in injected_outputs[3]))  # PSF compute errors
+        self.assertTrue(all(isinstance(item, int) for item in draw_sizes))
+        self.assertTrue(all(isinstance(item, BoundsI) for item in common_bounds))  # common bounds
+        self.assertTrue(all(isinstance(item, bool) for item in fft_size_errors))  # FFT size errors
+        self.assertTrue(all(isinstance(item, bool) for item in psf_compute_errors))  # PSF compute errors
+        mask_dict = exposure.mask.schema if is_cell else exposure.mask.getMaskPlaneDict()
+        assert "INJECTED" in mask_dict
+        assert "INJECTED_CORE" in mask_dict
+        # Non-cell coadds shouldn't fail to inject here
+        # Cell coadds actually should skip this object, but as it is,
+        # the draw_size is the intended width/length of the injection box,
+        # not the number of pixels that were actually injected into.
+        assert draw_sizes[-1] > 0
 
 
 class MemoryTestCase(lsst.utils.tests.MemoryTestCase):

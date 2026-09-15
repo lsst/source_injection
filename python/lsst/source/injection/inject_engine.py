@@ -36,6 +36,8 @@ import numpy.ma as ma
 from astropy.io import fits
 from astropy.table import Table
 from galsim import GalSimFFTSizeError
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass
 
 import lsst.afw.detection as afwDetection
 from lsst.afw.geom import SkyWcs
@@ -679,6 +681,13 @@ def _get_galsim_psf(
     return galsim_psf, error_args
 
 
+@dataclass(config=ConfigDict(arbitrary_types_allowed=True), kw_only=True)
+class CellBoundsInfo:
+    aperture_correction: float = 1.0
+    cell_ij: CellIJ
+    galsim_psf: galsim.InterpolatedImage
+
+
 def _inject_galsim_object_into_bounds(
     *,
     convolved_object,
@@ -853,11 +862,13 @@ def inject_galsim_objects_into_exposure(
     pixel_scale = wcs.getPixelScale(bbox.getCenter()).asArcseconds()
 
     if is_cell:
-        all_bounds: list[tuple[galsim.BoundsI, galsim.InterpolatedImage | None]] = []
+        all_bounds: list[tuple[galsim.BoundsI, CellBoundsInfo | None]] = []
         cell_grid = cell_coadd.grid
+        contributions = cell_coadd.provenance.contributions
         n_i, n_j = cell_grid.grid_size.as_tuple()
 
         fallback_psf = None
+        cell_inputs: dict[CellIJ, str] = {}
 
         # Iterate over all cells and find the ones with good PSFs
         for cell_i in range(n_i):
@@ -870,6 +881,15 @@ def inject_galsim_objects_into_exposure(
                 try:
                     if cell_ij in cell_coadd.bounds.missing:
                         continue
+                    is_cell_input = (contributions["cell_i"] == cell_i) & (contributions["cell_j"] == cell_j)
+                    # Return a string of sorted visits to efficiently count
+                    # unique combinations
+                    cell_inputs[cell_ij] = ",".join(
+                        str(visit) for visit in sorted(set(contributions["visit"][is_cell_input]))
+                    )
+
+                    # Use the native cell coadd PSF methods rather than
+                    # _get_galsim_psf which uses the to_legacy PSF
                     galsim_psf = cell_psf.compute_kernel_image(x=cen_x, y=cen_y).array
                     mat = wcs.linearizePixelToSky(wcs.pixelToSky(x=cen_x, y=cen_y), arcseconds).getMatrix()
                     galsim_wcs = galsim.JacobianWCS(mat[0, 0], mat[0, 1], mat[1, 0], mat[1, 1])
@@ -884,13 +904,24 @@ def inject_galsim_objects_into_exposure(
                         bbox_cell.min.y,
                         bbox_cell.max.y,
                     )
-                    all_bounds.append((bounds_cell, galsim_psf))
+                    bounds_info = CellBoundsInfo(
+                        aperture_correction=aperture_correction,
+                        cell_ij=cell_ij,
+                        galsim_psf=galsim_psf,
+                    )
+                    all_bounds.append((bounds_cell, bounds_info))
                     if fallback_psf is None:
                         fallback_psf = galsim_psf
                 except BoundsError:
                     # TODO: Should this ever happen? If it does, it probably
                     # means that cell_coadd.bounds.missing is wrong.
                     pass
+        cell_visits, cell_visits_index = np.unique(list(cell_inputs.values()), return_inverse=True)
+        # Store the index of the cell_visits to efficiently check if
+        # they're identical
+        cell_inputs_indices = dict(zip(cell_inputs.keys(), cell_visits_index, strict=True))
+        # Keep a dict for PSF/bounds retrieval prior to iteration over cells
+        cell_bounds = {bounds_info.cell_ij: bounds_info for _, bounds_info in all_bounds}
     else:
         all_bounds = [(full_bounds, None)]
 
@@ -922,15 +953,6 @@ def inject_galsim_objects_into_exposure(
         if galsim_pixel_scale < pixel_scale / 2 or galsim_pixel_scale > pixel_scale * 2:
             continue
 
-        # Get the PSF at the centroid of the object
-        galsim_psf_centroid, psf_error_args = _get_galsim_psf(
-            psf=psf,
-            pixel_coords=pixel_coords,
-            bbox=bbox,
-            calib_flux_radius=calib_flux_radius,
-            galsim_wcs=galsim_wcs,
-            sky_coords=sky_coords,
-        )
         # Get the fallback PSF (if available) to compute the injection box.
         # Even if the PSF at the centroid of an object is not valid, nearby
         # cells might be fine. For example, cells with saturated stars can
@@ -941,10 +963,26 @@ def inject_galsim_objects_into_exposure(
         # land outside the exposure's bbox. Non-cell coadds and visits could
         # also do something similar by searching for the nearest valid PSF,
         # but that's not as trivial as picking an "average" cell.
-        if galsim_psf_centroid is None:
-            if is_cell:
+        if is_cell:
+            cell_ij_cen = cell_grid.index_of(x=pixel_coords.x, y=pixel_coords.y)
+            galsim_psf_centroid = cell_bounds.get(cell_ij_cen)
+            if galsim_psf_centroid is None:
                 galsim_psf_centroid, psf_error_args = fallback_psf, []
+                cell_psf_index_cen = None
             else:
+                galsim_psf_centroid = galsim_psf_centroid.galsim_psf
+                cell_psf_index_cen = cell_inputs_indices[cell_ij_cen]
+        else:
+            # Get the PSF at the centroid of the object
+            galsim_psf_centroid, psf_error_args = _get_galsim_psf(
+                psf=psf,
+                pixel_coords=pixel_coords,
+                bbox=bbox,
+                calib_flux_radius=calib_flux_radius,
+                galsim_wcs=galsim_wcs,
+                sky_coords=sky_coords,
+            )
+            if galsim_psf_centroid is None:
                 psf_compute_errors[i] = True
                 if logger:
                     logger.debug(*psf_error_args)
@@ -988,7 +1026,7 @@ def inject_galsim_objects_into_exposure(
         area_to_inject = 0
         area_injected = 0
         bounds_fft_size_errors = {}
-        for idx_bound, (injection_bounds, galsim_psf_bounds) in enumerate(all_bounds):
+        for idx_bound, (injection_bounds, bounds_info) in enumerate(all_bounds):
             object_common_bounds = injection_bounds & sub_bounds
 
             # Inject the source if there is any overlap.
@@ -996,8 +1034,17 @@ def inject_galsim_objects_into_exposure(
                 area_to_inject += common_area
                 if is_cell:
                     # Use the per-cell PSF
-                    assert galsim_psf_bounds is not None
-                    conv = galsim.Convolve(object, galsim_psf_bounds)
+                    galsim_psf = bounds_info.galsim_psf
+                    assert galsim_psf is not None
+                    if bounds_info.cell_ij == cell_ij_cen:
+                        # These have to be one and the same if the cell is not
+                        # missing, which it can't be if it's in all_bounds
+                        assert galsim_psf is galsim_psf_centroid
+                    elif cell_psf_index_cen == cell_inputs_indices[bounds_info.cell_ij]:
+                        # Use the PSF from the cell containing the centroid
+                        assert galsim_psf is not galsim_psf_centroid
+                        galsim_psf = galsim_psf_centroid
+                    conv = galsim.Convolve(object, galsim_psf)
                 else:
                     common_bounds[i] = object_common_bounds  # type: ignore
                 try:

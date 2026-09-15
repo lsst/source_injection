@@ -68,15 +68,15 @@ class InjectEngineTestCase(TestCase):
             missing={self.cell_bad},
             band="r",
         )
-        self.injection_catalog = make_test_injection_catalog(
-            self.exposure.getWcs(),
-            self.exposure.getBBox(),
-        )
         cen_cell_bad = self.exposure.wcs.pixelToSky(
             self.cell_coadd.grid.bbox_of(CellIJ(1, 1)).to_legacy().getCenter()
         )
-        row_last = self.injection_catalog[-1]
-        self.injection_catalog.add_row(
+        injection_catalog = make_test_injection_catalog(
+            self.exposure.getWcs(),
+            self.exposure.getBBox(),
+        )
+        row_last = injection_catalog[-1]
+        injection_catalog.add_row(
             {
                 "ra": cen_cell_bad.getRa().asDegrees(),
                 "dec": cen_cell_bad.getDec().asDegrees(),
@@ -84,6 +84,33 @@ class InjectEngineTestCase(TestCase):
                 "source_type": row_last["source_type"],
             }
         )
+        # Add one galaxy that should span multiple cells
+        self.cell_galaxy = CellIJ(1, 1)
+        cen_cell_galaxy = self.exposure.wcs.pixelToSky(
+            self.cell_coadd.grid.bbox_of(CellIJ(1, 1)).to_legacy().getCenter()
+        )
+        n_rows = len(injection_catalog)
+        columns_sersic = ("n", "half_light_radius", "q", "beta")
+        injection_catalog.add_columns(
+            cols=tuple(
+                np.ma.masked_array(data=np.zeros(n_rows, dtype=float), mask=np.ones(n_rows, dtype=bool))
+                for _ in range(len(columns_sersic))
+            ),
+            names=columns_sersic,
+        )
+        injection_catalog.add_row(
+            {
+                "ra": cen_cell_galaxy.getRa().asDegrees(),
+                "dec": cen_cell_galaxy.getDec().asDegrees(),
+                "mag": row_last["mag"],
+                "source_type": "Sersic",
+                "n": 4.0,
+                "half_light_radius": 20.0,
+                "q": 0.8,
+                "beta": 15.0,
+            }
+        )
+        self.injection_catalog = injection_catalog
 
         self.galsim_objects = generate_galsim_objects(
             injection_catalog=self.injection_catalog,

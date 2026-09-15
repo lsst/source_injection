@@ -131,12 +131,17 @@ def get_shear_data(
         Dictionary of source data to pass to the Shear constructor.
     """
     shear_params = set(shear_attributes) & set(source_data.keys())
-    shear_data = {}
-    for shear_param in shear_params:
-        if shear_param == "beta":
-            shear_data.update({shear_param: source_data[shear_param] * galsim.degrees})
-        else:
-            shear_data.update({shear_param: source_data[shear_param]})
+    shear_data = {shear_param: source_data[shear_param] for shear_param in shear_params}
+    # Return an empty dict if all of the values are masked
+    # This should only be the case for DeltaFunction, but validation of the
+    # return is left for the caller of this function.
+    # While None might perhaps have been a better choice here, changing the
+    # return type is unnecessary given that galsim.Shear can be initialized
+    # with no args and correctly returns a trivial shear.
+    if all(np.ma.is_masked(x) for x in shear_data.values()):
+        return {}
+    if (beta := shear_data.get("beta")) is not None:
+        shear_data["beta"] = beta * galsim.degrees
     return shear_data
 
 

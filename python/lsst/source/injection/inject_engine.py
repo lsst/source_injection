@@ -26,7 +26,7 @@ __all__ = ["generate_galsim_objects", "inject_galsim_objects_into_exposure"]
 import numbers
 import os
 from collections import Counter
-from collections.abc import Generator
+from collections.abc import Generator, Iterable
 from typing import Any
 
 import galsim
@@ -764,7 +764,7 @@ def _inject_galsim_object_into_bounds(
 
 def inject_galsim_objects_into_exposure(
     exposure: ExposureF | CellCoadd,
-    objects: Generator[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
+    objects: Iterable[tuple[SpherePoint, Point2D, int, galsim.gsobject.GSObject], None, None],
     mask_plane_name: str = "INJECTED",
     calib_flux_radius: float = 12.0,
     draw_size_max: int = 1000,
@@ -781,7 +781,7 @@ def inject_galsim_objects_into_exposure(
     ----------
     exposure : `lsst.afw.image.ExposureF` or `lsst.images.cells.CellCoadd`
         The exposure to inject synthetic sources into.
-    objects : `Generator` [`tuple`, None, None]
+    objects : `Iterable` [`tuple`, None, None]
         An iterator of tuples that contains (or generates) locations and object
         surface brightness profiles to inject. The tuples should contain the
         following elements: `lsst.geom.SpherePoint`, `lsst.geom.Point2D`,

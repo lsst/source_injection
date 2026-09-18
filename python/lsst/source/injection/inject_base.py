@@ -32,8 +32,13 @@ from astropy import units
 from astropy.table import Table, hstack, vstack
 from astropy.units import Quantity, UnitConversionError
 
+from lsst.afw.detection import Psf
+from lsst.afw.geom import SkyWcs
+from lsst.afw.image import ExposureF, PhotoCalib
 from lsst.afw.image.exposure.exposureUtils import bbox_contains_sky_coords
 from lsst.geom import Point2D
+from lsst.images.cells import CellCoadd
+from lsst.images.fields import BaseField
 from lsst.pex.config import ChoiceField, Field, ListField
 from lsst.pipe.base import PipelineTask, PipelineTaskConfig, PipelineTaskConnections, Struct
 from lsst.pipe.base.connectionTypes import PrerequisiteInput
@@ -206,7 +211,14 @@ class BaseInjectTask(PipelineTask):
     _DefaultName = "baseInjectTask"
     ConfigClass = BaseInjectConfig
 
-    def run(self, injection_catalogs, input_exposure, psf, photo_calib, wcs):
+    def run(
+        self,
+        injection_catalogs: list[Table],
+        input_exposure: ExposureF | CellCoadd,
+        psf: Psf | None = None,
+        photo_calib: PhotoCalib | None = None,
+        wcs: SkyWcs | None = None,
+    ):
         """Inject sources into an image.
 
         Parameters
@@ -214,14 +226,16 @@ class BaseInjectTask(PipelineTask):
         injection_catalogs : `list` [`astropy.table.Table`]
             Tract level injection catalogs that potentially cover the named
             input exposure.
-        input_exposure : `lsst.afw.image.ExposureF`
+        input_exposure : `lsst.afw.image.ExposureF` or `lsst.images.CellCoadd`
             The exposure sources will be injected into.
         psf: `lsst.meas.algorithms.ImagePsf`
-            PSF model.
+            PSF model. Only required if input_exposure is an ExposureF.
         photo_calib : `lsst.afw.image.PhotoCalib`
             Photometric calibration used to calibrate injected sources.
+            Only required if input_exposure is an ExposureF.
         wcs : `lsst.afw.geom.SkyWcs`
             WCS used to calibrate injected sources.
+            Only required if input_exposure is an ExposureF.
 
         Returns
         -------
@@ -231,14 +245,24 @@ class BaseInjectTask(PipelineTask):
         """
         self.config = cast(BaseInjectConfig, self.config)
 
-        # Attach potential externally calibrated datasets to input_exposure.
-        # Keep originals so we can reset at the end.
-        original_psf = input_exposure.getPsf()
-        original_photo_calib = input_exposure.getPhotoCalib()
-        original_wcs = input_exposure.getWcs()
-        input_exposure.setPsf(psf)
-        input_exposure.setPhotoCalib(photo_calib)
-        input_exposure.setWcs(wcs)
+        if is_exposure := isinstance(input_exposure, ExposureF):
+            # Attach potential externally calibrated datasets to
+            # input_exposure. Keep originals to reset at the end.
+            original_psf = input_exposure.getPsf()
+            original_photo_calib = input_exposure.getPhotoCalib()
+            original_wcs = input_exposure.getWcs()
+            input_exposure.setPsf(psf)
+            input_exposure.setPhotoCalib(photo_calib)
+            input_exposure.setWcs(wcs)
+            bbox = input_exposure.getBBox()
+            photo_calib = input_exposure.getPhotoCalib()
+        elif isinstance(input_exposure, CellCoadd):
+            if wcs is None:
+                wcs = input_exposure.sky_projection.to_legacy()
+            bbox = input_exposure.bbox.to_legacy()
+            photo_calib = BaseField.make_legacy_photo_calib(input_exposure.unit)
+        else:
+            raise ValueError(f"Unsupported {type(input_exposure)=} for injection")
 
         # Make empty table if none supplied to support process_all_data_ids.
         if len(injection_catalogs) == 0:
@@ -274,11 +298,11 @@ class BaseInjectTask(PipelineTask):
         injection_catalog = self._standardize_columns(
             injection_catalog,
             column_mapping,
-            input_exposure.getWcs().getPixelScale(input_exposure.getBBox().getCenter()).asArcseconds(),
+            wcs.getPixelScale(bbox.getCenter()).asArcseconds(),
         )
 
         # Clean the injection catalog of sources which are not injectable.
-        injection_catalog = self._clean_sources(injection_catalog, input_exposure)
+        injection_catalog = self._clean_sources(injection_catalog, input_exposure, bbox=bbox, wcs=wcs)
 
         # Injection binary flag lookup dictionary.
         binary_flags = {
@@ -379,17 +403,20 @@ class BaseInjectTask(PipelineTask):
             )
 
         # Restore original input_exposure calibrated data.
-        input_exposure.setPsf(original_psf)
-        input_exposure.setPhotoCalib(original_photo_calib)
-        input_exposure.setWcs(original_wcs)
+        if is_exposure:
+            input_exposure.setPsf(original_psf)
+            input_exposure.setPhotoCalib(original_photo_calib)
+            input_exposure.setWcs(original_wcs)
 
-        # Add injection provenance and injection flags metadata.
-        metadata = input_exposure.getMetadata()
-        input_dataset_type = self.config.connections.input_exposure.format(**self.config.connections.toDict())
-        metadata.set("INJECTED", input_dataset_type, "Initial source injection dataset type")
-        input_exposure.getInfo().setVisitInfo(input_exposure.visitInfo.copyWith(hasSimulatedContent=True))
-        for flag, value in sorted(binary_flags.items(), key=lambda item: item[1]):
-            injection_catalog.meta[flag] = value
+            # Add injection provenance and injection flags metadata.
+            metadata = input_exposure.getMetadata()
+            input_dataset_type = self.config.connections.input_exposure.format(
+                **self.config.connections.toDict()
+            )
+            metadata.set("INJECTED", input_dataset_type, "Initial source injection dataset type")
+            input_exposure.getInfo().setVisitInfo(input_exposure.visitInfo.copyWith(hasSimulatedContent=True))
+            for flag, value in sorted(binary_flags.items(), key=lambda item: item[1]):
+                injection_catalog.meta[flag] = value
 
         output_struct = Struct(output_exposure=input_exposure, output_catalog=injection_catalog)
         return output_struct
@@ -494,7 +521,7 @@ class BaseInjectTask(PipelineTask):
                     pass
         return Table(injection_catalog)
 
-    def _clean_sources(self, injection_catalog, input_exposure):
+    def _clean_sources(self, injection_catalog, input_exposure, bbox=None, wcs=None):
         """Clean the injection catalog of sources which are not injectable.
 
         This method will remove sources which are not injectable for a variety
@@ -522,6 +549,12 @@ class BaseInjectTask(PipelineTask):
         """
         self.config = cast(BaseInjectConfig, self.config)
 
+        if wcs is None:
+            wcs = input_exposure.getWcs()
+
+        if bbox is None:
+            bbox = input_exposure.getBBox()
+
         # Exit early if there are no sources to inject.
         if len(injection_catalog) == 0:
             self.log.info("Catalog cleaning not applied to empty injection catalog.")
@@ -530,13 +563,12 @@ class BaseInjectTask(PipelineTask):
         sources_to_keep = np.ones(len(injection_catalog), dtype=bool)
 
         # Determine centroids and remove sources outside the padded bbox.
-        wcs = input_exposure.getWcs()
         has_sky = {"ra", "dec"} <= set(injection_catalog.columns)
         has_pixel = {"x", "y"} <= set(injection_catalog.columns)
         # Input catalog must contain either RA/Dec OR x/y.
         # If only x/y given, RA/Dec will be calculated.
         if not has_sky and has_pixel:
-            begin_x, begin_y = input_exposure.getBBox().getBegin()
+            begin_x, begin_y = bbox.getBegin()
             ras, decs = wcs.pixelToSkyArray(
                 begin_x + injection_catalog["x"].astype(float),
                 begin_y + injection_catalog["y"].astype(float),
@@ -550,7 +582,6 @@ class BaseInjectTask(PipelineTask):
         elif not has_sky and not has_pixel:
             self.log.warning("No spatial coordinates found in injection catalog; cannot inject any sources!")
         if has_sky:
-            bbox = input_exposure.getBBox()
             if self.config.trim_padding:
                 bbox.grow(int(self.config.trim_padding))
             is_contained = bbox_contains_sky_coords(

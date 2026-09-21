@@ -1048,12 +1048,20 @@ def inject_galsim_objects_into_exposure(
                 else:
                     common_bounds[i] = object_common_bounds  # type: ignore
                 try:
+                    if is_cell:
+                        # only the cell containing the centroid should have
+                        # the core mask plane set
+                        injection_core_bounds = full_bounds & object_common_bounds.withBorder(
+                            injection_core_size // 2
+                        )
+                    else:
+                        injection_core_bounds = full_bounds
                     _inject_galsim_object_into_bounds(
                         convolved_object=conv,
                         position_d=posd,
                         position_i=posi,
                         object_common_bounds=object_common_bounds,
-                        full_bounds=full_bounds,
+                        full_bounds=injection_core_bounds,
                         galsim_image=galsim_image,
                         galsim_variance=galsim_variance,
                         galsim_wcs=galsim_wcs,
@@ -1068,7 +1076,7 @@ def inject_galsim_objects_into_exposure(
                         mask_plane_core_name=mask_plane_core_name,
                         logger=logger,
                     )
-                    area_injected += 0
+                    area_injected += common_area
                 except GalSimFFTSizeError as err:
                     bounds_fft_size_errors[idx_bound] = err.size
         if logger and (area_to_inject == 0):

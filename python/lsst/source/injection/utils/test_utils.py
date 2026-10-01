@@ -19,12 +19,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-
+import astropy.units as u
 import numpy as np
 
 from lsst.afw.geom import makeCdMatrix, makeSkyWcs
-from lsst.afw.image import makePhotoCalibFromCalibZeroPoint
+from lsst.afw.image import ExposureF, makePhotoCalibFromCalibZeroPoint
 from lsst.geom import Box2I, Extent2I, Point2D, Point2I, SpherePoint, degrees
+from lsst.images import YX, Box, Image, Mask, SkyProjection, TractFrame
+from lsst.images.cells import (
+    CellCoadd,
+    CellGrid,
+    CellGridBounds,
+    CellIJ,
+    CellPointSpreadFunction,
+    CoaddProvenance,
+    PatchDefinition,
+)
 from lsst.ip.isr.isrTask import IsrTask
 from lsst.meas.algorithms.testUtils import plantSources
 from lsst.pipe.base import Pipeline
@@ -32,6 +42,88 @@ from lsst.pipe.base.pipelineIR import ContractIR, LabeledSubset
 from lsst.pipe.tasks.calibrate import CalibrateTask
 from lsst.pipe.tasks.characterizeImage import CharacterizeImageTask
 from lsst.source.injection import generate_injection_catalog
+
+
+def make_test_cell_coadd(
+    exposure: ExposureF,
+    cell_shape: YX,
+    psf_shape: tuple[int, int],
+    missing: set[CellIJ] | None = None,
+    image_unit: u.Unit = u.nJy,
+    **kwargs,
+) -> CellCoadd:
+    """Make a cell coadd out of an exposure.
+
+    Parameters
+    ----------
+    exposure : `lsst.afw.image.ExposureF`
+        An exposure with a simple PSF.
+    cell_shape : `lsst.images.YX`
+        The shape of each cell.
+    psf_shape : `tuple[int, int]`
+        The shape of the PSF image array.
+    missing : `set[CellIJ]` or `None`
+        The set of cells that have invalid PSFs, which will be set to nan.
+    image_unit : `astropy.units.Unit`
+        The unit of the exposure's image plane.
+    kwargs
+        Additional keyword arguments to pass to the CellCoadd constructor.
+
+    Returns
+    -------
+    cell_coadd : `lsst.images.cells.CellCoadd`
+        The exposure as a CellCoadd.
+    """
+    if missing is None:
+        missing = set()
+
+    exposure_psf = exposure.psf
+    box = Box.from_legacy(exposure.getBBox())
+    cell_grid = CellGrid(bbox=box, cell_shape=cell_shape)
+    cell_grid_bounds = CellGridBounds(grid=cell_grid, bbox=box, missing=missing)
+
+    # Make the cell PSF grid by evaluating the PSF at the center of each cell
+    cell_psfs = []
+    for cell_i in range(cell_grid.grid_size.i):
+        row_psfs = []
+        for cell_j in range(cell_grid.grid_size.j):
+            if (cell_ij := CellIJ(cell_i, cell_j)) in missing:
+                psf = np.full(psf_shape, np.nan)
+            else:
+                center = cell_grid.bbox_of(cell_ij).to_legacy().getCenter()
+                psf = exposure_psf.computeKernelImage(center).array
+                if psf.shape != psf_shape:
+                    raise ValueError(f"Exposure PSF image at {center=} has shape={psf.shape} != {psf_shape=}")
+            row_psfs.append(psf)
+        cell_psfs.append(row_psfs)
+
+    cell_psfs = CellPointSpreadFunction(bounds=cell_grid_bounds, array=np.array(cell_psfs))
+    # CellCoadds only take TractFrame for now
+    sky_projection = SkyProjection.from_legacy(
+        exposure.wcs,
+        TractFrame(skymap="dummy", tract=0, bbox=box),
+        pixel_bounds=box,
+    )
+    coadd_contributions = CoaddProvenance.make_empty_contribution_table(n_rows=1)
+    coadd_inputs = CoaddProvenance.make_empty_contribution_table(n_rows=1)
+    patch = PatchDefinition(
+        id=0,
+        index=YX(0, 0),
+        inner_bbox=box,
+        cells=cell_grid,
+    )
+
+    cell_coadd = CellCoadd(
+        image=Image.from_legacy(exposure.image, unit=image_unit),
+        variance=Image.from_legacy(exposure.variance),
+        mask=Mask.from_legacy(exposure.mask),
+        patch=patch,
+        provenance=CoaddProvenance(inputs=coadd_inputs, contributions=coadd_contributions),
+        psf=cell_psfs,
+        sky_projection=sky_projection,
+        **kwargs,
+    )
+    return cell_coadd
 
 
 def make_test_exposure():

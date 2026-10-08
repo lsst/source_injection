@@ -1,7 +1,7 @@
 description: Match tract-level injected coadd catalogs to injected object table datasets.
 parameters:
   bands_injected: ["u", "g", "r", "i", "z", "y"]
-  flux_algorithms: ["cModel", "gaap1p0", "gaap3p0", "kron", "psf", "sersic"]
+  flux_algorithms: ["cModel", "gaap1p0", "kron", "psf", "sersic"]
   source_type_column: "source_type"
 tasks:
   consolidateInjectedCatalogs:

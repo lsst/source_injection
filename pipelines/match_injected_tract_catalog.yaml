@@ -57,11 +57,9 @@ tasks:
               columns_target_copy.append(f"{band}_gaapFlux_flag")
               done_gaap = True
             suffixes = ["Flux", "FluxErr"]
-            if is_gaap:
-              suffixes.append("Flux_flag_bigPsf")
-            elif algo == "cModel":
+            if algo == "cModel":
               suffixes.append("_flag")
-            elif algo != "sersic":
+            elif (algo != "sersic") and not algo.startswith("gaap"):
               suffixes.append("Flux_flag")
             for suffix in suffixes:
               columns_target_copy.append(f"{band}_{algo}{suffix}")

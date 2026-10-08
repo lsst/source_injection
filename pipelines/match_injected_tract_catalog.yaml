@@ -68,6 +68,7 @@ tasks:
             "sersic_ra", "sersic_dec", "sersic_raErr", "sersic_decErr",
             "sersic_index", "sersic_indexErr", "sersic_rho", "sersic_rhoErr",
             "sersic_reff_x", "sersic_reff_xErr", "sersic_reff_y", "sersic_reff_yErr",
+            "sersic_reff_major", "sersic_reff_minor", "sersic_theta",
             "sersic_unknown_flag", "sersic_no_data_flag",
           ])
         # TODO: Remove as part of DM-44139

@@ -65,7 +65,6 @@ tasks:
               columns_target_copy.append(f"{band}_{algo}{suffix}")
         if "sersic" in parameters.flux_algorithms:
           columns_target_copy.extend([
-            "sersic_x", "sersic_y", "sersic_xErr", "sersic_yErr",
             "sersic_ra", "sersic_dec", "sersic_raErr", "sersic_decErr",
             "sersic_index", "sersic_indexErr", "sersic_rho", "sersic_rhoErr",
             "sersic_reff_x", "sersic_reff_xErr", "sersic_reff_y", "sersic_reff_yErr",

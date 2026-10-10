@@ -23,6 +23,10 @@ from __future__ import annotations
 
 __all__ = ["CoaddInjectConnections", "CoaddInjectConfig", "CoaddInjectTask"]
 
+import dataclasses
+from typing import cast
+
+from lsst.pex.config import Field
 from lsst.pipe.base.connectionTypes import Input, Output
 
 from .inject_base import BaseInjectConfig, BaseInjectConnections, BaseInjectTask
@@ -56,6 +60,16 @@ class CoaddInjectConnections(
         dimensions=("skymap", "tract", "patch", "band"),
     )
 
+    def __init__(self, *, config: CoaddInjectConfig | None = None):
+        super().__init__(config=config)
+
+        if not self.config:
+            return
+
+        if self.config.use_cell_coadds:
+            self.input_exposure = dataclasses.replace(self.input_exposure, storageClass="CellCoadd")
+            self.output_exposure = dataclasses.replace(self.output_exposure, storageClass="CellCoadd")
+
 
 class CoaddInjectConfig(  # type: ignore [call-arg]
     BaseInjectConfig,
@@ -63,7 +77,7 @@ class CoaddInjectConfig(  # type: ignore [call-arg]
 ):
     """Coadd-level configuration for source injection tasks."""
 
-    pass
+    use_cell_coadds = Field(dtype=bool, default=False, doc="Whether to use cell coadds?")
 
 
 class CoaddInjectTask(BaseInjectTask):
@@ -75,9 +89,14 @@ class CoaddInjectTask(BaseInjectTask):
     def runQuantum(self, butler_quantum_context, input_refs, output_refs):
         inputs = butler_quantum_context.get(input_refs)
 
-        inputs["psf"] = inputs["input_exposure"].getPsf()
-        inputs["photo_calib"] = inputs["input_exposure"].getPhotoCalib()
-        inputs["wcs"] = inputs["input_exposure"].getWcs()
+        config = cast(self.ConfigClass, self.config)
+        exposure = inputs["input_exposure"]
+        if config.use_cell_coadds:
+            exposure.apply_background(None)
+        else:
+            inputs["psf"] = exposure.getPsf()
+            inputs["photo_calib"] = exposure.getPhotoCalib()
+            inputs["wcs"] = exposure.getWcs()
 
         input_keys = ["injection_catalogs", "input_exposure", "sky_map", "psf", "photo_calib", "wcs"]
         outputs = self.run(**{key: value for (key, value) in inputs.items() if key in input_keys})

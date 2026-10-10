@@ -23,12 +23,16 @@ import logging
 import unittest
 from types import GeneratorType
 
+import astropy.units as u
 import galsim
 import numpy as np
+import pytest
 from galsim import BoundsI, GSObject
 
 import lsst.utils.tests
 from lsst.geom import Point2D, SpherePoint, degrees
+from lsst.images import YX
+from lsst.images.cells import CellIJ
 from lsst.source.injection.inject_engine import (
     generate_galsim_objects,
     get_gain_map,
@@ -36,7 +40,11 @@ from lsst.source.injection.inject_engine import (
     inject_galsim_objects_into_exposure,
     make_galsim_object,
 )
-from lsst.source.injection.utils.test_utils import make_test_exposure, make_test_injection_catalog
+from lsst.source.injection.utils.test_utils import (
+    make_test_cell_coadd,
+    make_test_exposure,
+    make_test_injection_catalog,
+)
 from lsst.utils.tests import TestCase
 
 
@@ -51,10 +59,80 @@ class InjectEngineTestCase(TestCase):
         GalSim objects intended for injection.
         """
         self.exposure = make_test_exposure()
-        self.injection_catalog = make_test_injection_catalog(
-            self.exposure.getWcs(),
-            self.exposure.getBBox(),
+        # Mark a cell as missing to test that it's ignored, although the data
+        # in it may still actually be fine
+        self.cell_bad = CellIJ(3, 3)
+        self.cell_bad_inverse = {
+            CellIJ(i, j)
+            for i in range(90)
+            for j in range(90)
+            if not (i == self.cell_bad.i and j == self.cell_bad.j)
+        }
+        self.cell_coadd, self.cell_coadd_inverse = (
+            make_test_cell_coadd(
+                exposure=self.exposure.clone(),
+                cell_shape=YX(x=35, y=35),
+                psf_shape=(33, 33),
+                missing=missing,
+                band="r",
+            )
+            for missing in ({self.cell_bad}, self.cell_bad_inverse)
         )
+        bbox_exp = self.exposure.getBBox()
+        bbox_cell_bad = self.cell_coadd.grid.bbox_of(self.cell_bad)
+        self.slice_x_cell_bad = slice(
+            bbox_cell_bad.start.x - bbox_exp.beginX,
+            bbox_cell_bad.stop.x - bbox_exp.beginX,
+        )
+        self.slice_y_cell_bad = slice(
+            bbox_cell_bad.start.y - bbox_exp.beginY,
+            bbox_cell_bad.stop.y - bbox_exp.beginY,
+        )
+        self.bbox_cell_bad = bbox_cell_bad
+        self.bbox_cell_bad_legacy = bbox_cell_bad.to_legacy()
+        cen_cell_bad = self.exposure.wcs.pixelToSky(self.bbox_cell_bad_legacy.getCenter())
+        injection_catalog = make_test_injection_catalog(
+            self.exposure.getWcs(),
+            bbox_exp,
+        )
+        row_last = injection_catalog[-1]
+        injection_catalog.add_row(
+            {
+                "ra": cen_cell_bad.getRa().asDegrees(),
+                "dec": cen_cell_bad.getDec().asDegrees(),
+                "mag": row_last["mag"],
+                "source_type": row_last["source_type"],
+            }
+        )
+        # Add one galaxy centered in the "bad" cell
+        self.cell_galaxy = self.cell_bad
+        cen_cell_galaxy = self.exposure.wcs.pixelToSky(
+            self.cell_coadd.grid.bbox_of(self.cell_galaxy).to_legacy().getCenter()
+        )
+        n_rows = len(injection_catalog)
+        columns_sersic = ("n", "half_light_radius", "q", "beta")
+        injection_catalog.add_columns(
+            cols=tuple(
+                np.ma.masked_array(data=np.zeros(n_rows, dtype=float), mask=np.ones(n_rows, dtype=bool))
+                for _ in range(len(columns_sersic))
+            ),
+            names=columns_sersic,
+        )
+        injection_catalog.add_row(
+            {
+                "ra": cen_cell_galaxy.getRa().asDegrees(),
+                "dec": cen_cell_galaxy.getDec().asDegrees(),
+                "mag": injection_catalog["mag"][0],
+                "source_type": "Sersic",
+                "n": 2.0,
+                "half_light_radius": 10 * 0.036,
+                "q": 0.8,
+                "beta": 15.0,
+            }
+        )
+        injection_catalog["half_light_radius"].unit = u.arcsec
+        self.injection_catalog = injection_catalog
+
         self.galsim_objects = generate_galsim_objects(
             injection_catalog=self.injection_catalog,
             photo_calib=self.exposure.photoCalib,
@@ -62,11 +140,18 @@ class InjectEngineTestCase(TestCase):
             fits_alignment="wcs",
             stamp_prefix="",
         )
+        self.photoCalib = self.exposure.getPhotoCalib()
+        self.inst_fluxes = [
+            float(self.photoCalib.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]
+        ]
 
     def tearDown(self):
         del self.exposure
+        del self.cell_coadd
         del self.injection_catalog
         del self.galsim_objects
+        del self.photoCalib
+        del self.inst_fluxes
 
     def test_make_galsim_object(self):
         source_data = self.injection_catalog[0]
@@ -137,29 +222,107 @@ class InjectEngineTestCase(TestCase):
         self.assertTrue(np.all(np.isfinite(gain_map.array)))
         self.assertTrue(np.all(gain_map.array > 0))
 
+    def test_inject_galsim_objects_into_cell_coadd(self):
+        self._test_inject_galsim_objects_into_exposure(
+            self.cell_coadd,
+            exposure_inverse=self.cell_coadd_inverse,
+            is_cell=True,
+        )
+
     def test_inject_galsim_objects_into_exposure(self):
-        flux0 = np.sum(self.exposure.image.array)
-        injected_outputs = inject_galsim_objects_into_exposure(
-            exposure=self.exposure,
-            objects=self.galsim_objects,
-            mask_plane_name="INJECTED",
-            calib_flux_radius=12.0,
-            draw_size_max=1000,
-            add_noise=False,
+        self._test_inject_galsim_objects_into_exposure(self.exposure, is_cell=False)
+
+    def _test_inject_galsim_objects_into_exposure(
+        self,
+        exposure,
+        exposure_inverse=None,
+        is_cell: bool = True,
+    ):
+        array_orig = exposure.image.array.copy()
+        flux0 = np.sum(array_orig)
+        cell_bad_orig = array_orig[self.slice_y_cell_bad, self.slice_x_cell_bad]
+        for injection_core_size in (None, 0, 1.5):
+            with pytest.raises(ValueError):
+                inject_galsim_objects_into_exposure(
+                    exposure=exposure,
+                    objects=(),
+                    injection_core_size=injection_core_size,
+                )
+        galsim_objects = self.galsim_objects
+        if is_cell:
+            # At least the last object will be needed later
+            galsim_objects = list(galsim_objects)
+
+        injected_outputs, injected_outputs_inverse = (
+            (
+                inject_galsim_objects_into_exposure(
+                    exposure=to_inject,
+                    objects=galsim_objects,
+                    mask_plane_name="INJECTED",
+                    calib_flux_radius=12.0,
+                    draw_size_max=1000,
+                    add_noise=False,
+                    injection_core_size=5,
+                )
+                if to_inject is not None
+                else None
+            )
+            for to_inject in (exposure, exposure_inverse)
         )
-        pc = self.exposure.getPhotoCalib()
-        inst_fluxes = [float(pc.magnitudeToInstFlux(mag)) for mag in self.injection_catalog["mag"]]
-        self.assertAlmostEqual(
-            np.sum(self.exposure.image.array) - flux0,
-            np.sum(inst_fluxes),
-            delta=0.00015 * np.sum(inst_fluxes),
-        )
-        self.assertEqual(len(injected_outputs[0]), len(self.injection_catalog["ra"]))
-        self.assertTrue(all(isinstance(injected_output, list) for injected_output in injected_outputs))
-        self.assertTrue(all(isinstance(item, int) for item in injected_outputs[0]))  # draw sizes
-        self.assertTrue(all(isinstance(item, BoundsI) for item in injected_outputs[1]))  # common bounds
-        self.assertTrue(all(isinstance(item, bool) for item in injected_outputs[2]))  # FFT size errors
-        self.assertTrue(all(isinstance(item, bool) for item in injected_outputs[3]))  # PSF compute errors
+
+        cell_bad = exposure.image.array[self.slice_y_cell_bad, self.slice_x_cell_bad]
+        mask_cell_bad = exposure.mask[self.bbox_cell_bad if is_cell else self.bbox_cell_bad_legacy]
+
+        check_total_flux = True
+        if is_cell:
+            # Test that nothing was injected in the bad cell
+            np.testing.assert_array_equal(cell_bad_orig, cell_bad)
+            np.testing.assert_array_equal(mask_cell_bad.get("INJECTED"), False)
+            np.testing.assert_array_equal(mask_cell_bad.get("INJECTED_CORE"), False)
+            if exposure_inverse is not None:
+                cell_bad_inverse = exposure_inverse.image.array[self.slice_y_cell_bad, self.slice_x_cell_bad]
+                mask_cell_bad_inverse = exposure_inverse.mask[self.bbox_cell_bad]
+                np.testing.assert_array_less(cell_bad_orig, cell_bad_inverse)
+                np.testing.assert_array_equal(mask_cell_bad_inverse.get("INJECTED"), True)
+                # Default core size is 3x3 and there should be at least one
+                # injected core from the galaxy. Others may exist depending on
+                # the random seed used
+                self.assertGreaterEqual(np.sum(mask_cell_bad_inverse.get("INJECTED_CORE")), 9)
+                exposure.image[self.bbox_cell_bad].array = exposure_inverse.image[self.bbox_cell_bad].array
+            else:
+                check_total_flux = False
+        else:
+            # Test that the entire good cell is filled
+            # Note this requires that the injected galaxy be large enough, so
+            # if setUp is modified to inject a smaller object it will fail
+            np.testing.assert_array_less(cell_bad_orig, cell_bad)
+            injected_bitmask = mask_cell_bad.getPlaneBitMask("INJECTED")
+            np.testing.assert_array_equal(mask_cell_bad.array & injected_bitmask, injected_bitmask)
+
+        if check_total_flux:
+            self.assertAlmostEqual(
+                np.sum(exposure.image.array) - flux0,
+                np.sum(self.inst_fluxes),
+                delta=0.00015 * np.sum(self.inst_fluxes),
+            )
+
+        for injected_exposure in (exposure, exposure_inverse):
+            if injected_exposure is None:
+                continue
+            mask_dict = exposure.mask.schema if is_cell else exposure.mask.getMaskPlaneDict()
+            assert "INJECTED" in mask_dict
+            assert "INJECTED_CORE" in mask_dict
+
+        for injected_outputs in (injected_outputs, injected_outputs_inverse):
+            if injected_outputs is None:
+                continue
+            draw_sizes, common_bounds, fft_size_errors, psf_compute_errors = injected_outputs
+            self.assertEqual(len(draw_sizes), len(self.injection_catalog["ra"]))
+            self.assertTrue(all(isinstance(injected_output, list) for injected_output in injected_outputs))
+            self.assertTrue(all(isinstance(item, int) and (item > 0) for item in draw_sizes))
+            self.assertTrue(all(isinstance(item, BoundsI) for item in common_bounds))  # common bounds
+            self.assertTrue(all(item is False for item in fft_size_errors))  # FFT size errors
+            self.assertTrue(all(isinstance(item, bool) for item in psf_compute_errors))  # PSF compute errors
 
 
 class MemoryTestCase(lsst.utils.tests.MemoryTestCase):
